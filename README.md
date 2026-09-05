@@ -26,7 +26,7 @@
 
 ### 3. 兼容 pi-web，也能加任何网页
 
-不只是 DSH。**当你也在用 pi-web**（本地或远程），装上对应插件后同样能收到"消息完成通知"。而且功能区的 `+` 可以添加**任意 `http(s)` 本地服务或网页**——把常用的工具都收进一个桌面窗口里。
+不只是 DSH。**当你也在用 [pi-web](https://github.com/agegr/pi-web)**（本地或远程），装上对应插件后同样能收到"消息完成通知"。而且功能区的 `+` 可以添加**任意 `http(s)` 本地服务或网页**——把常用的工具都收进一个桌面窗口里。
 
 ## 核心能力
 
@@ -65,7 +65,12 @@ dsh **0.1.2+** 浏览器鉴权：壳在能拿到 launch token 时静默换 cooki
 
 ## 会话状态与显示面（推荐装插件）
 
-配 `plugins/dsh-plus-surface` 插件后：
+消息角标/气泡的完整能力需要**两个插件**，分别接 DSH 侧和 pi 侧的事实：
+
+- **`plugins/dsh-plus-surface`**（v0.2.4）——dsh 侧事实桥。把 DSH 进程内的会话事实（进行中/结束/被查看）写成 `~/.dsh/dsh-plus/bridge.json`，并为壳提供页面内会话跳转入口。
+- **`plugins/pi-dsh-plus-surface`**（v0.1.2）——pi 侧事实插件。把每个 pi 会话的进行中/结束/命名事实写成**分片文件**（`~/.pi/dsh-plus/facts/<sessionId>.json`），壳读目录合并出角标与气泡。**TUI 与 pi-web 通用**（全局装一次两边都生效）。
+
+装 dsh 侧插件：
 
 ```bash
 dsh plugin --profile web add <本仓库 plugins/dsh-plus-surface 绝对路径>
@@ -81,9 +86,27 @@ dsh plugin --profile web add <本仓库 plugins/dsh-plus-surface 绝对路径>
 
 ### pi-web
 
-添加 `http://127.0.0.1:<pi-web端口>` 为应用；busy 灯走 HTTP 轮询 `/api/sessions`。完整会话气泡需装 `plugins/pi-dsh-plus-surface`。
+添加 `http://127.0.0.1:<pi-web端口>` 为应用；busy 灯走 HTTP 轮询 `/api/sessions`。完整会话气泡需装 `plugins/pi-dsh-plus-surface`。pi-web 的 GitHub 仓库见 [agegr/pi-web](https://github.com/agegr/pi-web)。
 
-## 打包（可选）
+## 下载安装包（未签名）
+
+从 [Releases](https://github.com/kaerf15/dsh-plus/releases) 直接下载安装包即可，**无需自己打包**。安装包**当前未签名**（macOS 无 Apple Developer 证书、Windows 无代码签名证书），因此首次运行会被系统拦截，需要手动允许一次：
+
+**macOS（.dmg）**
+1. 双击 `DSH+-0.1.8-arm64.dmg`，把 **DSH+** 拖进「应用程序」。
+2. 首次打开若弹出 **“无法验证开发者”**，右键 DSH+ → **打开**，再点 **“打开”** 确认。
+3. 如果仍被拦截：**系统设置 → 隐私与安全性**，在「安全性」里点 **“仍要打开”**。
+
+**Windows（.exe）**
+1. 双击 `DSH+ Setup 0.1.8.exe` 安装。
+2. SmartScreen 若弹出 **“Windows 已保护你的电脑”**，点 **“更多信息”** → **“仍要运行”**。
+3. 若被杀软拦截，放行一次即可。
+
+> 想彻底去掉这些提示，可自备证书：macOS 用 `npm run dist:signed`（需 Apple Development 证书），Windows 在 electron-builder 里配置签名证书（见 [Code Signing](https://www.electron.build/code-signing)）后重新打包。
+
+## 源码打包（可选）
+
+你自己改源码后想重新打包：
 
 ```bash
 npm run dist              # electron-builder --dir → dist/mac-arm64/DSH+.app 或 dist/win-unpacked/

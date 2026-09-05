@@ -69,4 +69,3 @@ webServer（编译死 Next.js，扩展开不了同源端点，pi-web 0.8.11 HTTP
 - 壳侧来源：`lib/surface/facts-dir.js`（本机分片目录合并 + completed 粘性清除；0.1.2 起同一套逻辑
   兼读 HTTP 出口镜像）；出口都缺席时壳自动用 `lib/surface/piweb-poll.js`（按 `/api/sessions` 的
   running 迁移推断，零插件可用）
-- 设计文档：`DESIGN-multi-connection.md` Phase 2

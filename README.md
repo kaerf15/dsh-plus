@@ -94,8 +94,6 @@ dsh-plus/
 └── test/                   # node --test test/*.test.mjs
 ```
 
-开发细节、IPC 表、已知坑见 [`DEVELOPMENT.md`](DEVELOPMENT.md)；显示面与多连接的架构设计见 [`DESIGN-surface.md`](DESIGN-surface.md)、[`DESIGN-multi-connection.md`](DESIGN-multi-connection.md)。
-
 ## License
 
 [MIT](LICENSE) © [kaerf15](https://github.com/kaerf15)

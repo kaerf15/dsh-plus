@@ -16,7 +16,7 @@
 
 > ⚠️ **消息通知需要装插件**（`dsh-plus-surface` / `pi-dsh-plus-surface`），壳本身**不内置**通知能力。**未装插件时**只降级为轮询角标，**不会有系统通知**。装法见下文「会话状态与显示面」。
 
-装上插件后，**无论你的 DSH 在本地还是远程**，都能拿到消息通知：
+装上插件后，**无论 DSH / pi-web 装在本地还是远程电脑**，都能拿到消息通知。远程场景（比如装在另一台机器/服务器上，经 `DSH_URL` 或端口映射连过来）也一样：远端装了插件 → 走事实出口拿全保真的精确状态；远端没装插件 → 自动退化为轮询（仍有基本角标/完成气泡，但无精确中断识别与命名）。
 
 - 会话**完成**、**等待你回应**（待交互/未读）时，壳会推给你系统通知。
 - 除了 DSH 会话，**你也可以把其他消息源推到上面**，统一收口。
@@ -56,9 +56,11 @@ npm start          # = electron .
 2. 扫描本机监听端口，命中 dsh 特征（见 `lib/detect-dsh.js`）
 3. 都没找到且允许自动拉起：自选空闲端口（从 3080 起），`dsh web --port N --no-open` 并等待就绪
 
+**远程场景**：dsh 或 pi-web 装在**另一台电脑/服务器**上时，用 `DSH_URL` 指向它的地址即可（如 `http://192.168.1.20:3080`，或经端口映射/隧道暴露的地址）。远端**装了插件**（`dsh-plus-surface` / `pi-dsh-plus-surface`）→ 走事实出口拿全保真的精确状态（含精确结束时刻、中断识别、命名）；远端**没装插件** → 自动退化为轮询（仍有基本角标/完成气泡）。两种情况下消息通知都能到你这台机器上，只是精确度有差。
+
 | 变量 | 作用 |
 |------|------|
-| `DSH_URL` | 显式地址，如 `http://127.0.0.1:8080` |
+| `DSH_URL` | 显式地址，如 `http://127.0.0.1:8080`（本地）或 `http://192.168.1.20:3080`（远程） |
 | `DSH_SHELL_NO_SPAWN=1` | 禁止自动拉起 dsh |
 | `DSH_SHELL_SIGNATURES` | 覆盖检测特征（逗号分隔，官方改版救场） |
 | `DSH_SHELL_NATIVE_MENU=0` | 关闭应用区原生右键菜单兜底 |
@@ -95,7 +97,7 @@ pi install npm:pi-dsh-plus-surface
 
 ### pi-web
 
-添加 `http://127.0.0.1:<pi-web端口>` 为应用；busy 灯走 HTTP 轮询 `/api/sessions`。完整会话气泡需装 `plugins/pi-dsh-plus-surface`。pi-web 的 GitHub 仓库见 [agegr/pi-web](https://github.com/agegr/pi-web)。
+添加 `http://127.0.0.1:<pi-web端口>` 为应用；busy 灯走 HTTP 轮询 `/api/sessions`。完整会话气泡需装 `plugins/pi-dsh-plus-surface`。**pi-web 装在远程电脑上也可以**——在功能区 `+` 添加远程地址（如 `http://192.168.1.20:<pi-web端口>`，或经端口映射/隧道暴露的地址），远端装了 `pi-dsh-plus-surface` 插件后，`serve-facts.mjs` 会提供 HTTP 只读事实出口（默认 `DSH_PLUS_FACTS_PORT` 3099），壳拉取后同样能出角标、完成气泡与消息通知。pi-web 的 GitHub 仓库见 [agegr/pi-web](https://github.com/agegr/pi-web)。
 
 ## 下载安装包（未签名）
 

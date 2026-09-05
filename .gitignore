@@ -1,0 +1,13 @@
+# 依赖
+node_modules/
+
+# 构建产物（可重建，不留快照）
+dist/
+build/
+
+# 系统
+.DS_Store
+*.log
+
+# 运行时事实文件（本地生成，不入库）
+*.bridge.json

@@ -1,0 +1,71 @@
+<!doctype html>
+<!-- 气泡悬停卡片的内容页：由主进程以无边框 alwaysOnTop 子窗口承载，
+     浮在应用区 native WebContentsView 之上（DOM tooltip 跨不过那层）。
+     无阴影，一条细边圈出内容。主进程调 setContent(title, subtitle, glyph) 填内容并读回所需高度。
+     glyph 可选：内联 SVG / 图片 data URI / URL；命名图标（bubble 等）不在此重复显示。 -->
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src * data:">
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: transparent;
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  .card {
+    background: light-dark(#ffffff, #232324);
+    border: 1px solid light-dark(#e1e5ee, #353638);
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  .icon { display: none; margin-bottom: 4px; }
+  .icon img { width: 28px; height: 28px; object-fit: contain; display: block; }
+  .icon svg { width: 28px; height: 28px; display: block; }
+  .title {
+    font-size: 12px; font-weight: 600;
+    color: light-dark(#1f2328, #e6e8ea);
+    word-break: break-all;
+  }
+  .cwd {
+    font-size: 11px; margin-top: 3px;
+    color: light-dark(#61666b, #9ba0a5);
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon" id="i"></div>
+    <div class="title" id="t"></div>
+    <div class="cwd" id="c"></div>
+  </div>
+  <script>
+    // 返回内容实际高度，主进程据此调窗口尺寸
+    function setContent(title, subtitle, glyph) {
+      document.getElementById('t').textContent = title || '（无标题对话）'
+      const c = document.getElementById('c')
+      c.textContent = subtitle || ''
+      c.style.display = subtitle ? 'block' : 'none'
+
+      const ic = document.getElementById('i')
+      ic.innerHTML = ''
+      ic.style.display = 'none'
+      const g = String(glyph || '')
+      if (g.startsWith('<svg')) {
+        ic.innerHTML = g
+        ic.style.display = 'block'
+      } else if (g.startsWith('data:') || g.startsWith('http://') || g.startsWith('https://')) {
+        const img = document.createElement('img')
+        img.src = g
+        img.alt = ''
+        ic.appendChild(img)
+        ic.style.display = 'block'
+      }
+      return document.querySelector('.card').offsetHeight
+    }
+  </script>
+</body>
+</html>

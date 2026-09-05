@@ -1,0 +1,125 @@
+{
+  "protocol": "dsh-plus.recipe",
+  "version": 1,
+  "recipes": [
+    {
+      "domain": "dsh.sessions",
+      "join": {
+        "identity": "sessionId"
+      },
+      "items": [
+        {
+          "id": "dsh:badge:running",
+          "appId": "dsh",
+          "kind": "badge",
+          "semantic": "busy",
+          "aggregate": {
+            "count": {
+              "where": {
+                "status": "running",
+                "pendingInteraction": {
+                  "nonEmpty": false
+                }
+              }
+            }
+          },
+          "omitWhenZero": true
+        },
+        {
+          "id": "dsh:fin:${sessionId}",
+          "appId": "dsh",
+          "kind": "bubble",
+          "semantic": "done",
+          "glyph": "bubble",
+          "foreach": {
+            "where": {
+              "completed": true,
+              "pendingInteraction": {
+                "nonEmpty": false
+              },
+              "bootstrapped": {
+                "nonEmpty": false
+              }
+            }
+          },
+          "title": "${title}",
+          "subtitle": "${cwd}",
+          "sortBy": "finishedAt",
+          "sortDir": "desc",
+          "action": {
+            "type": "open-session",
+            "target": {
+              "sessionId": "${sessionId}"
+            }
+          }
+        },
+        {
+          "id": "dsh:pending:${sessionId}",
+          "appId": "dsh",
+          "kind": "bubble",
+          "semantic": "warn",
+          "glyph": "bubble",
+          "foreach": {
+            "where": {
+              "pendingInteraction": {
+                "nonEmpty": true
+              }
+            }
+          },
+          "title": "${title}",
+          "subtitle": "待交互",
+          "sortBy": "updatedAt",
+          "sortDir": "desc",
+          "action": {
+            "type": "open-session",
+            "target": {
+              "sessionId": "${sessionId}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "domain": "pi.sessions",
+      "join": {
+        "identity": "sessionId"
+      },
+      "items": [
+        {
+          "id": "pi:badge:running",
+          "kind": "badge",
+          "semantic": "busy",
+          "aggregate": {
+            "count": {
+              "where": {
+                "status": "running"
+              }
+            }
+          },
+          "omitWhenZero": true
+        },
+        {
+          "id": "pi:fin:${sessionId}",
+          "kind": "bubble",
+          "semantic": "done",
+          "glyph": "bubble",
+          "foreach": {
+            "where": {
+              "completed": true
+            }
+          },
+          "title": "${title}",
+          "subtitle": "${cwd}",
+          "sortBy": "finishedAt",
+          "sortDir": "desc",
+          "action": {
+            "type": "open-pi-session",
+            "target": {
+              "sessionId": "${sessionId}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

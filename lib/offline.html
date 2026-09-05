@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>未连接</title>
+<style>
+  :root {
+    --bg: #f9fafb;
+    --ink: #1d2129;
+    --muted: #61666b;
+    --faint: #9aa1a9;
+    --accent: #4176e6;
+    --accent-ink: #ffffff;
+    --hairline: #00000014;
+    --pill-bg: #ffffff;
+    --pill-border: #e1e5ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151517;
+      --ink: #e6e8ea;
+      --muted: #a2a8ae;
+      --faint: #6e747a;
+      --accent: #5686fe;
+      --hairline: #ffffff0f;
+      --pill-bg: #1d1d1f;
+      --pill-border: #353638;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 48px 32px;
+    max-width: 420px;
+  }
+
+  /* ── 签名元素：声呐脉冲。连接中以主题色持续扩散（正在寻找服务），
+       落定离线后停住、变为虚线环（状态编码进形态，不只靠文字）。── */
+  .sonar { position: relative; width: 72px; height: 72px; margin-bottom: 28px; }
+  .sonar .ring {
+    position: absolute; inset: 0;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    opacity: 0;
+    animation: ping 2.4s cubic-bezier(0.2, 0.6, 0.3, 1) infinite;
+  }
+  .sonar .ring:nth-child(2) { animation-delay: 1.2s; }
+  @keyframes ping {
+    0%   { transform: scale(1);    opacity: 0.55; }
+    80%  { transform: scale(1.85); opacity: 0; }
+    100% { transform: scale(1.85); opacity: 0; }
+  }
+  .avatar {
+    position: absolute; inset: 8px;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 9%, var(--bg));
+    color: var(--accent); /* 驱动地球 svg 的 currentColor 描边 */
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .4s;
+  }
+  body.offline .ring { animation: none; opacity: 0; }
+  body.offline .avatar {
+    background: transparent;
+    border: 1.5px dashed var(--faint);
+    color: var(--faint);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sonar .ring { animation: none; opacity: 0; }
+    .avatar { border: 1.5px solid var(--accent); }
+  }
+
+  h1 {
+    font-size: 22px; font-weight: 600; color: var(--ink);
+    letter-spacing: 0.01em; margin-bottom: 8px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+  }
+  .status { font-size: 13px; margin-bottom: 18px; transition: color .3s; }
+  body.offline .status { color: var(--ink); }
+
+  .addr {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px; color: var(--muted);
+    background: var(--pill-bg);
+    border: 1px solid var(--pill-border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    margin-bottom: 14px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .meta {
+    font-size: 11px; color: var(--faint);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 26px; min-height: 14px;
+    opacity: 0; transition: opacity .3s;
+  }
+  body.offline .meta { opacity: 1; }
+
+  button {
+    font: inherit; font-size: 13px; font-weight: 500;
+    color: var(--accent-ink); background: var(--accent);
+    border: none; border-radius: 8px;
+    padding: 8px 20px; cursor: pointer;
+    transition: transform .08s, filter .15s, opacity .15s;
+  }
+  button:hover { filter: brightness(1.06); }
+  button:active { transform: scale(0.97); }
+  button:disabled { opacity: .55; cursor: default; transform: none; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .hint {
+    position: fixed; bottom: 18px; left: 0; right: 0;
+    text-align: center; font-size: 11px; color: var(--faint);
+  }
+</style>
+</head>
+<body>
+  <main>
+    <div class="sonar" aria-hidden="true">
+      <div class="ring"></div>
+      <div class="ring"></div>
+      <div class="avatar" id="avatar"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><ellipse cx="12" cy="12" rx="4" ry="8.5"/></svg></div>
+    </div>
+    <h1 id="name">应用</h1>
+    <p class="status" id="status">正在连接…</p>
+    <p class="addr" id="addr"></p>
+    <p class="meta" id="meta"></p>
+    <button id="retry" type="button">立即重试</button>
+  </main>
+  <p class="hint">服务恢复后会自动打开，也可以右键图标 →「刷新」</p>
+
+<script>
+(function () {
+  'use strict'
+  var params = new URLSearchParams(location.search)
+  var target = params.get('url') || ''
+  var name = params.get('name') || ''
+
+  // 身份：名字缺省时退化为 host；头像用中性地球（服务挂着，favicon 取不到；首字母对 127.0.0.1 这类主机名没意义）
+  var host = ''
+  try { host = new URL(target).host } catch (e) { /* target 缺失 */ }
+  if (!name) name = host || '应用'
+  document.getElementById('name').textContent = name
+  document.getElementById('addr').textContent = target || '（未配置地址）'
+  document.title = name + ' · 未连接'
+
+  var statusEl = document.getElementById('status')
+  var metaEl = document.getElementById('meta')
+  var retryBtn = document.getElementById('retry')
+
+  var attempts = 0
+  var inflight = null
+
+  function render() {
+    // 前两次失败仍是乐观「正在连接」——服务可能正在启动；第三次起落定离线态
+    if (attempts < 3) {
+      document.body.classList.remove('offline')
+      statusEl.textContent = '正在连接…'
+    } else {
+      document.body.classList.add('offline')
+      statusEl.textContent = '服务未响应'
+    }
+    if (attempts > 0) {
+      metaEl.textContent = '已重试 ' + attempts + ' 次 · 仍在自动重试'
+    }
+  }
+
+  function delay() {
+    // 起步快（覆盖服务启动窗口），随后稳定 5s；页面被遮住时降到 15s 省资源
+    if (document.hidden) return 15000
+    return attempts < 3 ? 1500 : 5000
+  }
+
+  function probe() {
+    if (inflight || !target) return
+    var ctrl = new AbortController()
+    var timer = setTimeout(function () { ctrl.abort() }, 3500)
+    retryBtn.disabled = true
+    retryBtn.textContent = '重试中…'
+    inflight = fetch(target, { mode: 'no-cors', cache: 'no-store', signal: ctrl.signal })
+      .then(function () {
+        // no-cors：任何 HTTP 响应（含 401/404）都说明服务活了
+        statusEl.textContent = '连上了，正在打开…'
+        location.replace(target)
+      })
+      .catch(function () {
+        attempts++
+        render()
+        setTimeout(probe, delay())
+      })
+      .finally(function () {
+        clearTimeout(timer)
+        inflight = null
+        retryBtn.disabled = false
+        retryBtn.textContent = '立即重试'
+      })
+  }
+
+  retryBtn.addEventListener('click', probe)
+  document.addEventListener('visibilitychange', function () {
+    // 从遮挡回到可见时，不等下一拍，立刻探一次
+    if (!document.hidden && attempts > 0) probe()
+  })
+
+  if (!target) {
+    statusEl.textContent = '这个应用没有配置地址'
+    retryBtn.style.display = 'none'
+    return
+  }
+  render()
+  probe()
+})()
+</script>
+</body>
+</html>

@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src * data:;">
+<style>
+  :root {
+    --bg: #f9fafb;
+    --fg: #61666b;
+    --hover-bg: #f1f3f5;
+    --active: #4176e6;
+    --divider: #00000014;
+    --input-bg: #ffffff;
+    --input-border: #e1e5ee;
+    --warn: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151517;
+      --fg: #cfd3d6;
+      --hover-bg: #232324;
+      --active: #5686fe;
+      --divider: #ffffff0f;
+      --input-bg: #232324;
+      --input-border: #353638;
+      --warn: #f87171;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    user-select: none;
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--fg);
+  }
+  #toolbar {
+    height: 44px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--divider);
+  }
+  /* mac：左上给红黄绿让位（红绿灯区 ~80px，再多留 12px 呼吸感）；win：右上给 min/max/close 让位 */
+  #toolbar.mac { padding-left: 92px; }
+  #toolbar.win { padding-right: 140px; }
+
+  .app-btn {
+    width: 32px; height: 32px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: transparent;
+    border-radius: 7px;
+    color: var(--fg);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .app-btn:hover { background: var(--hover-bg); }
+  .app-btn.active { color: var(--active); background: var(--hover-bg); }
+  /* 未连接：轻灰化即可（太重会看不清图标本身），纯运行时态由壳推导 */
+  .app-btn.offline { filter: grayscale(.55); opacity: .8; }
+  .app-btn.active::after {
+    content: '';
+    position: absolute; bottom: -6px; left: 50%;
+    transform: translateX(-50%);
+    width: 16px; height: 2px; border-radius: 1px;
+    background: var(--active);
+  }
+  /* 有新版本时鲸鱼右上角的小红点 */
+  .app-btn .badge {
+    position: absolute; top: 2px; right: 2px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #dc2626;
+    box-shadow: 0 0 0 2px var(--bg);
+  }
+  /* 数值角标（左上，避开右上更新红点）；轻微呼吸表示「活着」 */
+  .app-btn .run-badge {
+    position: absolute; top: 1px; left: -1px;
+    min-width: 14px; height: 14px; padding: 0 3px;
+    border-radius: 7px;
+    background: #16a34a; color: #fff;
+    font-size: 9px; font-weight: 700; line-height: 14px; text-align: center;
+    box-shadow: 0 0 0 2px var(--bg);
+    animation: run-pulse 2.6s ease-in-out infinite;
+  }
+  @keyframes run-pulse { 50% { opacity: .55; } }
+  /* 通用忙碌圆点（任何应用：busy 且无数值的 badge item） */
+  .app-btn .busy-dot {
+    position: absolute; top: 1px; left: -1px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #16a34a;
+    box-shadow: 0 0 0 2px var(--bg);
+    animation: run-pulse 2.6s ease-in-out infinite;
+  }
+  /* 应用组：图标 + 条目带是一个整体，悬停共用一颗胶囊底 */
+  .app-group {
+    display: flex; align-items: center; gap: 3px;
+    border-radius: 9px; padding: 0 2px;
+    transition: background .15s ease;
+  }
+  .app-group:hover { background: var(--hover-bg); }
+  .app-group:hover .app-btn:not(.active) { background: transparent; }
+
+  /* 条目带：紧随图标，不限量（DSH 红气泡、别的应用的 text/card 都走这里） */
+  .fin-strip { display: flex; align-items: center; gap: 3px; }
+
+  /* 图标与条目带之间的「引信」：有条目才出现，颜色跟第一条的 semantic */
+  .fin-dots { display: flex; align-items: center; gap: 2px; color: var(--warn); }
+  .fin-dots i { display: block; border-radius: 50%; background: currentColor; }
+  .fin-dots i:first-child { width: 4px; height: 4px; opacity: .5; }
+  .fin-dots i:last-child { width: 2.5px; height: 2.5px; opacity: .3; }
+  .fin-dots.sem-busy { color: #16a34a; }
+  .fin-dots.sem-done { color: var(--warn); }
+  .fin-dots.sem-info { color: var(--fg); }
+  .fin-dots.sem-warn { color: #f59e0b; }
+
+  /* 条目按钮：kind 决定形态，semantic 决定颜色，有无 action 决定能不能点 */
+  .fin-btn {
+    height: 24px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 6px;
+    color: var(--fg); cursor: pointer; overflow: hidden;
+    transition: background .12s ease, transform .12s ease;
+  }
+  .fin-btn.kind-bubble, .fin-btn.kind-card { width: 24px; }
+  .fin-btn.kind-text {
+    width: auto; max-width: min(360px, 42vw); padding: 0 7px; gap: 4px;
+    font-size: 11px; font-weight: 600;
+  }
+  .fin-btn.kind-text .item-glyph { display: flex; flex: 0 0 auto; }
+  .fin-btn.kind-text .item-label {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fin-btn.sem-done { color: var(--warn); }
+  .fin-btn.sem-busy { color: #16a34a; }
+  .fin-btn.sem-info { color: var(--fg); }
+  .fin-btn.sem-warn { color: #f59e0b; }
+  .fin-btn:hover { background: color-mix(in srgb, currentColor 12%, transparent); transform: translateY(-1px); }
+  .fin-btn:not(.has-action) { cursor: default; }
+  .fin-btn svg { width: 15px; height: 15px; flex: 0 0 auto; }
+  .fin-btn img { width: 15px; height: 15px; flex: 0 0 auto; object-fit: contain; }
+  .fin-btn.kind-text svg, .fin-btn.kind-text img { width: 12px; height: 12px; }
+
+  /* 诞生：从图标方向滑出并弹开，右侧邻居被宽度动画顺滑挤开 */
+  @keyframes fin-in {
+    from { width: 0; opacity: 0; transform: translateX(-6px) scale(.4); }
+    60%  { transform: translateX(1px) scale(1.08); }
+    to   { width: 24px; opacity: 1; transform: none; }
+  }
+  @keyframes fin-fade-in {
+    from { opacity: 0; transform: translateX(-4px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .fin-btn.fin-enter { animation: fin-in .3s cubic-bezier(.2, .8, .3, 1.2) both; }
+  .fin-btn.kind-text.fin-enter { animation: fin-fade-in .2s ease both; }
+  /* 消散：缩小淡出，邻居顺滑回挤 */
+  @keyframes fin-out {
+    from { width: 24px; opacity: 1; }
+    to   { width: 0; opacity: 0; transform: scale(.4); }
+  }
+  @keyframes fin-fade-out {
+    to { opacity: 0; transform: scale(.9); }
+  }
+  .fin-btn.fin-exit { animation: fin-out .22s ease-in both; pointer-events: none; }
+  .fin-btn.kind-text.fin-exit { animation: fin-fade-out .18s ease-in both; }
+  /* 新条目诞生时图标轻轻「点头」 */
+  @keyframes fin-nod { 35% { transform: scale(.86); } }
+  .app-group.fin-born .app-btn { animation: fin-nod .35s ease; }
+  /* 拖拽换位：目标按钮左侧亮条指示插入位置 */
+  .app-btn[draggable="true"] { cursor: grab; }
+  /* 正在拖动的那个按钮半透明：一眼认出「抓的是谁」 */
+  .app-btn.dragging { opacity: .35; cursor: grabbing; }
+  .app-btn.drag-over::before {
+    content: '';
+    position: absolute; left: -4px; top: 6px; bottom: 6px;
+    width: 3px; border-radius: 2px;
+    background: var(--active);
+  }
+  /* 快捷键 / 通知设置面板 */
+  #sc-panel, #nt-panel { right: 12px; width: 320px; }
+  .sc-row, .nt-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; gap: 8px; }
+  .sc-key {
+    min-width: 130px; height: 28px; padding: 0 10px;
+    border: 1px solid var(--input-border); border-radius: 6px;
+    background: var(--bg); color: var(--fg);
+    font-size: 13px; cursor: pointer;
+  }
+  .sc-key.recording { border-color: var(--active); color: var(--active); }
+  .sc-hint { font-size: 11px; color: var(--add-fg); }
+  .nt-desc { font-size: 12px; line-height: 1.55; color: var(--fg); opacity: .88; }
+  .nt-switch {
+    width: 42px; height: 24px; border-radius: 12px; border: none; cursor: pointer;
+    background: var(--input-border); position: relative; flex-shrink: 0;
+    transition: background .15s ease;
+  }
+  .nt-switch.on { background: var(--active); }
+  .nt-switch::after {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    transition: transform .15s ease;
+  }
+  .nt-switch.on::after { transform: translateX(18px); }
+  .app-btn img { width: 18px; height: 18px; border-radius: 4px; object-fit: contain; }
+  .app-btn svg { width: 18px; height: 18px; }
+  .initial { font-size: 14px; font-weight: 600; line-height: 1; }
+
+  /* 浮层面板（添加应用 / 安装 DSH）*/
+  .panel {
+    position: fixed; top: 44px;
+    display: none;
+    flex-direction: column; gap: 8px;
+    width: 340px;
+    padding: 12px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  }
+  .panel.open { display: flex; }
+  #add-form { left: 12px; }
+  #dsh-panel { right: 12px; }
+
+  .panel input, .panel select {
+    height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 13px;
+    outline: none;
+    min-width: 0;
+  }
+  .panel input:focus, .panel select:focus { border-color: var(--active); }
+  .panel .row { display: flex; gap: 8px; justify-content: flex-end; align-items: center; }
+  .panel button {
+    height: 28px; padding: 0 14px;
+    border: none; border-radius: 6px;
+    font-size: 13px; cursor: pointer;
+    white-space: nowrap;
+  }
+  .panel button:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-primary { background: var(--active); color: #fff; }
+  .btn-ghost { background: var(--hover-bg); color: var(--fg); }
+  .err { color: var(--warn); font-size: 12px; display: none; }
+  .err.show { display: block; }
+
+  .panel-title { font-weight: 600; color: var(--fg); font-size: 13px; }
+  .dsh-msg { font-size: 12px; line-height: 1.5; color: var(--fg); word-break: break-all; }
+  .dsh-msg.err { color: var(--warn); }
+  #dsh-versions { flex: 1; }
+</style>
+</head>
+<body>
+  <div id="toolbar"></div>
+
+  <div id="add-form" class="panel">
+    <input id="add-name" type="text" placeholder="名称（可选）">
+    <input id="add-url" type="text" placeholder="网址（必填）">
+    <input id="add-facts-url" type="text" placeholder="事实出口 URL（可选，如 http://127.0.0.1:3082）">
+    <div id="add-err" class="err">地址无效，请输入完整 http(s) 地址</div>
+    <div class="row">
+      <button id="add-cancel" class="btn-ghost">取消</button>
+      <button id="add-ok" class="btn-primary">添加</button>
+    </div>
+  </div>
+
+  <div id="dsh-panel" class="panel">
+    <div class="panel-title" id="dsh-panel-title">安装 DSH</div>
+    <div class="row">
+      <select id="dsh-versions"><option value="">加载中…</option></select>
+      <button id="dsh-install" class="btn-primary">安装</button>
+    </div>
+    <div id="dsh-msg" class="dsh-msg"></div>
+  </div>
+
+  <div id="sc-panel" class="panel">
+    <div class="panel-title">快捷键设置</div>
+    <div class="sc-row"><span>上一个应用</span><button id="sc-prev" class="sc-key">…</button></div>
+    <div class="sc-row"><span>下一个应用</span><button id="sc-next" class="sc-key">…</button></div>
+    <div class="sc-row"><span>网页后退</span><button id="sc-back" class="sc-key">…</button></div>
+    <div class="sc-row"><span>网页前进</span><button id="sc-forward" class="sc-key">…</button></div>
+    <div id="sc-msg" class="dsh-msg"></div>
+    <div id="sc-hint" class="sc-hint"></div>
+    <div class="row">
+      <button id="sc-reset" class="btn-ghost">恢复默认</button>
+      <button id="sc-close" class="btn-ghost">取消</button>
+      <button id="sc-save" class="btn-primary">保存</button>
+    </div>
+  </div>
+
+  <div id="nt-panel" class="panel">
+    <div class="panel-title">通知设置</div>
+    <p class="nt-desc">当 DSH+ 在后台（切到别的应用、缩小或藏到托盘）时，对话完成或需要你的确认/回答，会发送到系统通知中心。正在看 DSH 页面时不打扰。</p>
+    <div class="nt-row">
+      <span>发送到通知中心</span>
+      <button id="nt-toggle" type="button" class="nt-switch" aria-label="发送到通知中心"></button>
+    </div>
+    <div id="nt-hint" class="sc-hint"></div>
+    <div class="row">
+      <button id="nt-close" class="btn-ghost">关闭</button>
+    </div>
+  </div>
+
+  <script>
+    const toolbar = document.getElementById('toolbar')
+    const formEl = document.getElementById('add-form')
+    const dshPanel = document.getElementById('dsh-panel')
+    const dshMsg = document.getElementById('dsh-msg')
+    let editingId = null // 正在编辑的应用 id；null = 新建模式
+    let installing = false
+    let dragId = null // 正在拖拽换位的应用 id（DSH 固定首位，不参与）
+    let draftSc = null // 快捷键设置面板里的草稿配置
+    let recordingKey = null // 正在录制的项：'prev' | 'next' | 'back' | 'forward' | null
+    let lastApps = [] // 最近一次渲染的应用列表（状态更新时按它重渲染）
+    let surfaceState = { items: [] } // 显示面条目（统一 Item 流）
+
+    // 按 appId 取条目。badge 画在图标上，其余 kind 画在图标旁的条目带。
+    function badgeOf(appId) {
+      return surfaceState.items.find((i) => i.appId === appId && i.kind === 'badge') || null
+    }
+    function stripItemsOf(appId) {
+      return surfaceState.items.filter((i) => i.appId === appId && i.kind !== 'badge')
+    }
+    const isMac = window.shell.platform === 'darwin'
+    toolbar.classList.add(isMac ? 'mac' : 'win')
+
+    // 鲸鱼：直接用 DSH 官方 favicon（/favicon.svg）——浅色模式黑色，深色模式自动变白
+    const WHALE_SVG = `<svg viewBox="0 0 50 50" fill="none"><style>@media (prefers-color-scheme: dark){path{fill:#fff}}</style><path d="M48.8354 10.0479C48.3232 9.79199 48.1025 10.2798 47.8032 10.5278C47.7007 10.6079 47.6143 10.7119 47.5273 10.8076C46.7793 11.624 45.9048 12.1597 44.7622 12.0957C43.0923 12 41.666 12.5356 40.4058 13.8398C40.1377 12.2319 39.2476 11.272 37.8926 10.6558C37.1836 10.3359 36.4668 10.0156 35.9702 9.31982C35.6235 8.82373 35.5293 8.27197 35.356 7.72754C35.2456 7.3999 35.1353 7.06396 34.7651 7.00781C34.3633 6.94385 34.2056 7.2876 34.0479 7.57568C33.418 8.75195 33.1733 10.0479 33.1973 11.3599C33.2524 14.312 34.4736 16.6641 36.8999 18.3359C37.1758 18.5278 37.2466 18.7197 37.1597 19C36.9946 19.5757 36.7974 20.1357 36.624 20.7119C36.5137 21.0801 36.3486 21.1597 35.9624 21C34.6309 20.4321 33.481 19.5918 32.4644 18.5757C30.7393 16.8721 29.1792 14.9917 27.2334 13.52C26.7764 13.1758 26.3193 12.856 25.8467 12.5518C23.8618 10.584 26.1069 8.96777 26.627 8.77588C27.1704 8.57568 26.8159 7.8877 25.0591 7.896C23.3022 7.90381 21.6953 8.50391 19.647 9.30371C19.3477 9.42383 19.0322 9.51172 18.7095 9.58398C16.8501 9.22363 14.9199 9.14355 12.9033 9.37598C9.10596 9.80762 6.07275 11.6396 3.84326 14.7681C1.16455 18.5278 0.53418 22.7998 1.30664 27.2559C2.11768 31.9521 4.46582 35.8398 8.07373 38.8799C11.8159 42.0322 16.1255 43.5762 21.041 43.2803C24.0269 43.104 27.3516 42.6963 31.1016 39.4561C32.0469 39.936 33.0396 40.1279 34.686 40.272C35.9546 40.3921 37.1758 40.208 38.1211 40.0078C39.6021 39.688 39.4995 38.2881 38.9639 38.0322C34.623 35.9678 35.5762 36.8081 34.71 36.1279C36.9155 33.4639 40.2402 30.6958 41.54 21.728C41.6426 21.0161 41.5557 20.5679 41.54 19.9917C41.5322 19.6396 41.6108 19.5039 42.0049 19.4639C43.0923 19.3359 44.1479 19.0317 45.1167 18.4878C47.9292 16.9199 49.064 14.3438 49.3315 11.2559C49.3711 10.7837 49.3237 10.2959 48.8354 10.0479ZM24.3262 37.8398C20.1196 34.4639 18.0791 33.3521 17.2358 33.3999C16.4482 33.4482 16.5898 34.3682 16.7632 34.9678C16.9443 35.5601 17.1812 35.9683 17.5117 36.4878C17.7402 36.832 17.8979 37.3442 17.2832 37.728C15.9282 38.584 13.5728 37.4399 13.4624 37.3838C10.7207 35.7358 8.42822 33.5601 6.81348 30.584C5.25342 27.7197 4.34766 24.6479 4.19775 21.3677C4.1582 20.5757 4.38672 20.2959 5.15869 20.1519C6.17529 19.96 7.22314 19.9199 8.23926 20.0718C12.5327 20.7119 16.1885 22.6719 19.2529 25.7759C21.002 27.5439 22.3252 29.6558 23.6885 31.7202C25.1377 33.9121 26.6978 36 28.6831 37.7119C29.3843 38.312 29.9434 38.7681 30.479 39.104C28.8643 39.2881 26.1699 39.3281 24.3262 37.8398ZM26.3433 24.6001C26.3433 24.248 26.6191 23.9678 26.9658 23.9678C27.0444 23.9678 27.1152 23.9839 27.1782 24.0078C27.2651 24.04 27.3438 24.0879 27.4067 24.1602C27.5171 24.272 27.5801 24.4321 27.5801 24.6001C27.5801 24.9521 27.3042 25.2319 26.9575 25.2319C26.6108 25.2319 26.3433 24.9521 26.3433 24.6001ZM32.6064 27.8799C32.2046 28.0479 31.8027 28.1919 31.4165 28.208C30.8179 28.2397 30.1641 27.9922 29.8096 27.688C29.2583 27.2158 28.8643 26.9521 28.6987 26.1279C28.6279 25.7759 28.6675 25.2319 28.7305 24.9199C28.8721 24.248 28.7144 23.8159 28.2495 23.4238C27.8716 23.104 27.3911 23.0161 26.8633 23.0161C26.666 23.0161 26.4849 22.9277 26.3511 22.856C26.1304 22.7441 25.9492 22.4639 26.1226 22.1201C26.1777 22.0078 26.4458 21.7358 26.5088 21.688C27.2256 21.272 28.0527 21.4077 28.8169 21.7197C29.5259 22.0161 30.0615 22.5601 30.834 23.3281C31.6216 24.2559 31.7632 24.5117 32.2124 25.208C32.5669 25.752 32.8901 26.312 33.1104 26.9521C33.2446 27.3521 33.0713 27.6802 32.6064 27.8799Z" fill="#000"/></svg>`
+
+    // 无 favicon 应用的兜底图标：中性地球，不用名字首字母（名字可能只是 127.0.0.1 这类主机名，首字母没意义）
+    const GLOBE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17"/><ellipse cx="12" cy="12" rx="4" ry="8.5"/></svg>'
+
+    // 结束对话按钮的对话气泡图标
+    const BUBBLE_SVG = '<svg viewBox="0 0 16 16" fill="none"><path d="M2.4 3.2A1.6 1.6 0 0 1 4 1.6h8a1.6 1.6 0 0 1 1.6 1.6v6.2a1.6 1.6 0 0 1-1.6 1.6H6.1L3 13.5c-.38.32-.95.02-.95-.48V3.2z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>'
+
+    // 图标渲染：内联 SVG → 图片(data/URL) → 命名图标 → fallback。
+    // 命名图标只此一处注册（bubble/whale）；自定义图片文件已在 recipe-loader 侧转成 data URI。
+    const NAMED_GLYPHS = { bubble: BUBBLE_SVG, whale: WHALE_SVG }
+    function glyphHTML(item, fallback) {
+      const g = item && item.glyph
+      if (g) {
+        if (g.startsWith('<svg')) return g
+        if (g.startsWith('data:') || g.startsWith('http://') || g.startsWith('https://')) {
+          return `<img src="${g}" alt="">`
+        }
+        if (NAMED_GLYPHS[g]) return NAMED_GLYPHS[g]
+      }
+      return fallback || BUBBLE_SVG
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+    }
+
+    function stripInnerHTML(item) {
+      if (item.kind === 'text') {
+        const g = item.glyph ? glyphHTML(item, '') : ''
+        const t = escapeHtml(item.title || item.subtitle || '')
+        return (g ? `<span class="item-glyph">${g}</span>` : '') + (t ? `<span class="item-label">${t}</span>` : '')
+      }
+      return glyphHTML(item, BUBBLE_SVG)
+    }
+
+    // 每个应用一条常驻条目带（Map 保住节点，动画才有进场/退场）
+    const strips = new Map() // appId -> { strip, dots }
+    function stripOf(appId) {
+      let s = strips.get(appId)
+      if (s) return s
+      const strip = document.createElement('div')
+      strip.className = 'fin-strip'
+      const dots = document.createElement('div')
+      dots.className = 'fin-dots'
+      dots.innerHTML = '<i></i><i></i>'
+      s = { strip, dots }
+      strips.set(appId, s)
+      return s
+    }
+
+    // 悬停向下浮出标题卡片：主进程以无边框子窗口承载（浮于应用区 native 视图之上）
+    let tipTimer = null
+    function showItemTip(btn, f) {
+      if (!f || (!f.title && !f.subtitle)) return
+      clearTimeout(tipTimer)
+      tipTimer = setTimeout(() => {
+        const r = btn.getBoundingClientRect()
+        window.shell.surface.showTip({ x: r.left, y: r.bottom + 5, title: f.title, subtitle: f.subtitle, glyph: f.glyph })
+      }, 120) // 120ms 延迟：扫过条目群时不闪烁
+    }
+    function hideItemTip() {
+      clearTimeout(tipTimer)
+      window.shell.surface.hideTip()
+    }
+
+    function updateAppStrip(appId) {
+      const { strip, dots } = stripOf(appId)
+      const list = stripItemsOf(appId)
+      const lead = list[0]
+      dots.className = 'fin-dots' + (lead && lead.semantic ? ' sem-' + lead.semantic : '')
+      if (list.length && dots.parentNode !== strip) strip.prepend(dots)
+      if (!list.length && dots.parentNode === strip) dots.remove()
+
+      const wantIds = list.map((f) => f.id)
+      for (const btn of [...strip.querySelectorAll('.fin-btn')]) {
+        if (!wantIds.includes(btn.dataset.sid) && !btn.classList.contains('fin-exit')) {
+          btn.classList.add('fin-exit')
+          btn.addEventListener('animationend', () => btn.remove(), { once: true })
+          // 兜底：窗口隐藏/遮挡时渲染节流，animationend 可能迟迟不发，幽灵按钮会残留
+          setTimeout(() => btn.remove(), 500)
+        }
+      }
+      // 退场中的节点被摘掉后 mouseleave 不会再触发，不收会残留一张孤卡片
+      if (strip.querySelector('.fin-btn.fin-exit')) hideItemTip()
+
+      let born = false
+      for (const f of list) {
+        let btn = [...strip.querySelectorAll('.fin-btn:not(.fin-exit)')].find((b) => b.dataset.sid === f.id)
+        if (!btn) {
+          btn = document.createElement('button')
+          btn.className = 'fin-btn fin-enter'
+          btn.dataset.sid = f.id
+          btn.onmouseenter = () => showItemTip(btn, btn._f)
+          btn.onmouseleave = hideItemTip
+          btn.onclick = () => {
+            hideItemTip()
+            if (btn._f && btn._f.action) window.shell.surface.dispatch(btn._f.id)
+          }
+          btn.addEventListener('animationend', () => btn.classList.remove('fin-enter'), { once: true })
+          born = true
+        }
+        btn._f = f
+        const kind = f.kind === 'text' || f.kind === 'card' ? f.kind : 'bubble'
+        btn.classList.toggle('kind-text', kind === 'text')
+        btn.classList.toggle('kind-card', kind === 'card')
+        btn.classList.toggle('kind-bubble', kind === 'bubble')
+        for (const s of ['busy', 'done', 'info', 'warn']) btn.classList.toggle('sem-' + s, f.semantic === s)
+        btn.classList.toggle('has-action', Boolean(f.action))
+        const sig = kind + '\0' + (f.glyph || '') + '\0' + (f.title || '') + '\0' + (f.subtitle || '')
+        if (btn.dataset.sig !== sig) {
+          btn.innerHTML = stripInnerHTML(f)
+          btn.dataset.sig = sig
+        }
+        strip.appendChild(btn)
+      }
+      if (born) {
+        const g = strip.closest('.app-group')
+        if (g) {
+          g.classList.remove('fin-born')
+          void g.offsetWidth
+          g.classList.add('fin-born')
+        }
+      }
+    }
+
+    function updateAppBadge(btn, app) {
+      const badge = badgeOf(app.id)
+      const n = badge && badge.badge > 0 ? badge.badge : 0
+      const busy = badge && badge.semantic === 'busy' && n === 0
+      btn.title = app.hasUpdate
+        ? `${app.name}（有新版本 ${app.hasUpdate}）`
+        : n > 0
+          ? (app.builtin === 'dsh' ? `${app.name}（${n} 个对话进行中）` : `${app.name}（${n}）`)
+          : busy ? `${app.name}（忙碌）` : app.name
+
+      let rb = btn.querySelector('.run-badge')
+      if (n > 0) {
+        if (!rb) { rb = document.createElement('span'); rb.className = 'run-badge'; btn.appendChild(rb) }
+        if (rb.textContent !== String(n)) rb.textContent = n
+      } else if (rb) rb.remove()
+
+      let dot = btn.querySelector('.busy-dot')
+      if (busy) {
+        if (!dot) { dot = document.createElement('span'); dot.className = 'busy-dot'; btn.appendChild(dot) }
+      } else if (dot) dot.remove()
+    }
+
+    function syncSurface() {
+      for (const app of lastApps) {
+        const btn = toolbar.querySelector(`.app-btn[data-app-id="${CSS.escape(app.id)}"]`)
+        if (btn) updateAppBadge(btn, app)
+        updateAppStrip(app.id)
+      }
+    }
+
+    function setIcon(btn, app) {
+      if (app.builtin === 'dsh') { btn.innerHTML = WHALE_SVG; return }
+      // favicon 加载失败（或加载成功但图片为空）时摘掉 img、回退为中性地球图标，不留破图占位
+      if (app.icon) {
+        const img = document.createElement('img')
+        img.src = app.icon
+        img.alt = ''
+        img.onerror = () => { img.remove(); btn.insertAdjacentHTML('beforeend', GLOBE_SVG) }
+        img.onload = () => { if (!img.naturalWidth || !img.naturalHeight) img.onerror() }
+        btn.appendChild(img)
+        return
+      }
+      btn.insertAdjacentHTML('beforeend', GLOBE_SVG)
+    }
+
+    function render(apps) {
+      lastApps = apps
+      hideItemTip() // 重渲染会销毁悬停中的条目（不再触发 mouseleave），主动收卡片
+      const live = new Set(apps.map((a) => a.id))
+      for (const id of [...strips.keys()]) if (!live.has(id)) strips.delete(id)
+
+      toolbar.innerHTML = ''
+      for (const app of apps) {
+        const btn = document.createElement('button')
+        btn.className = 'app-btn' + (app.active ? ' active' : '') + (app.offline ? ' offline' : '')
+        btn.dataset.appId = app.id
+        btn.title = app.name + (app.offline ? '（未连接）' : '')
+        setIcon(btn, app)
+        if (app.builtin === 'dsh' && app.hasUpdate) {
+          const b = document.createElement('span')
+          b.className = 'badge'
+          btn.appendChild(b)
+        }
+        // 拖拽换位：DSH 固定首位；其他应用可互相拖动调整顺序（顺序持久化）。
+        // 双击刷新时第二个 mousedown 不要变成拖拽（否则 dblclick 经常发不出）。
+        if (app.builtin !== 'dsh') {
+          let lastDownAt = 0
+          btn.addEventListener('mousedown', () => {
+            const now = Date.now()
+            btn._dbl = now - lastDownAt < 400
+            lastDownAt = now
+          })
+          btn.draggable = true
+          btn.ondragstart = (e) => {
+            if (btn._dbl) { e.preventDefault(); return }
+            dragId = app.id
+            btn.classList.add('dragging')
+            e.dataTransfer.effectAllowed = 'move'
+          }
+          btn.ondragover = (e) => { e.preventDefault(); btn.classList.add('drag-over') }
+          btn.ondragleave = () => btn.classList.remove('drag-over')
+          btn.ondrop = (e) => {
+            e.preventDefault()
+            btn.classList.remove('drag-over')
+            if (dragId && dragId !== app.id) window.shell.reorderApps(dragId, app.id)
+            dragId = null
+          }
+          btn.ondragend = () => {
+            dragId = null
+            document.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'))
+            document.querySelectorAll('.app-btn.dragging').forEach((el) => el.classList.remove('dragging'))
+          }
+        }
+        btn.onclick = () => window.shell.switchTo(app.id)
+        // 双击图标 = 刷新该应用页（不必右键）。click 仍先切过去，再 reload。
+        btn.ondblclick = (e) => {
+          e.preventDefault()
+          window.shell.reloadApp(app.id)
+        }
+        // 所有应用都可右键：DSH 弹管理菜单，其它应用弹编辑/删除（主进程区分）
+        btn.oncontextmenu = (e) => { e.preventDefault(); window.shell.appMenu(app.id) }
+        const group = document.createElement('div')
+        group.className = 'app-group'
+        group.appendChild(btn)
+        group.appendChild(stripOf(app.id).strip)
+        toolbar.appendChild(group)
+      }
+      const add = document.createElement('button')
+      add.className = 'app-btn'
+      add.title = '添加应用'
+      add.innerHTML = '<span class="initial">+</span>'
+      add.onclick = () => {
+        const willOpen = !formEl.classList.contains('open')
+        if (willOpen) {
+          closeInstallPanel()
+          closeShortcutsPanel()
+          closeNotificationsPanel()
+          editingId = null
+          document.getElementById('add-name').value = ''
+          document.getElementById('add-url').value = ''
+          document.getElementById('add-facts-url').value = ''
+          document.getElementById('add-err').classList.remove('show')
+        }
+        formEl.classList.toggle('open', willOpen)
+        window.shell.setAddFormOpen(willOpen)
+        if (willOpen) document.getElementById('add-url').focus()
+      }
+      toolbar.appendChild(add)
+      syncSurface()
+    }
+
+    // ---------- 添加应用表单 ----------
+    function closeAddForm() {
+      formEl.classList.remove('open')
+      window.shell.setAddFormOpen(false)
+      editingId = null
+      document.getElementById('add-err').classList.remove('show')
+    }
+
+    document.getElementById('add-cancel').onclick = closeAddForm
+    document.getElementById('add-ok').onclick = async () => {
+      const name = document.getElementById('add-name').value.trim()
+      const url = document.getElementById('add-url').value.trim()
+      const factsUrl = document.getElementById('add-facts-url').value.trim()
+      const res = await window.shell.addApp({ id: editingId || undefined, name, url, factsUrl })
+      if (res.ok) {
+        formEl.classList.remove('open')
+        window.shell.setAddFormOpen(false)
+        editingId = null
+        document.getElementById('add-name').value = ''
+        document.getElementById('add-url').value = ''
+        document.getElementById('add-facts-url').value = ''
+        document.getElementById('add-err').classList.remove('show')
+      } else {
+        document.getElementById('add-err').classList.add('show')
+      }
+    }
+
+    window.shell.onOpenEdit((app) => {
+      closeInstallPanel()
+      editingId = app.id
+      document.getElementById('add-name').value = app.name
+      document.getElementById('add-url').value = app.url
+      document.getElementById('add-facts-url').value = app.factsUrl || ''
+      document.getElementById('add-err').classList.remove('show')
+      formEl.classList.add('open')
+      window.shell.setAddFormOpen(true)
+      document.getElementById('add-url').focus()
+    })
+
+    // ---------- DSH 安装 / 更换版本面板 ----------
+    function setDshMsg(text, isErr) {
+      dshMsg.textContent = text || ''
+      dshMsg.className = 'dsh-msg' + (isErr ? ' err' : '')
+    }
+
+    function openInstallPanel() {
+      // 互斥：关掉添加应用表单和其它设置面板
+      closeShortcutsPanel()
+      closeNotificationsPanel()
+      formEl.classList.remove('open')
+      editingId = null
+      document.getElementById('add-err').classList.remove('show')
+      dshPanel.classList.add('open')
+      window.shell.setAddFormOpen(true)
+      setDshMsg('')
+      window.shell.dsh.getStatus().then((st) => {
+        document.getElementById('dsh-panel-title').textContent = st.installed ? '替换 DSH 版本' : '安装 DSH'
+        // 主进程菜单路径的安装/重启进行中：同步按钮锁与提示，进度行随后由 onInstallProgress 流入
+        if (st.installing || st.restarting) {
+          installing = true // 面板忙锁：安装或重启期间都锁按钮，由 onStatusChanged 解锁
+          const btn = document.getElementById('dsh-install')
+          btn.disabled = true
+          btn.textContent = st.installing ? '安装中…' : '重启中…'
+          setDshMsg(st.installing ? '正在安装，请稍候…（实时输出见下方）' : '正在重启 DSH，请稍候…')
+        }
+        window.shell.dsh.listVersions().then((r) => fillVersionSelect(r.versions, st.version)).catch(() => {})
+      }).catch(() => {})
+    }
+
+    function closeInstallPanel() {
+      dshPanel.classList.remove('open')
+      window.shell.setAddFormOpen(false)
+    }
+
+    function fillVersionSelect(versions, current) {
+      const sel = document.getElementById('dsh-versions')
+      sel.innerHTML = ''
+      if (!versions || versions.length === 0) {
+        const opt = document.createElement('option')
+        opt.value = ''
+        opt.textContent = '无法获取版本列表'
+        sel.appendChild(opt)
+        return
+      }
+      for (const v of versions) {
+        const opt = document.createElement('option')
+        opt.value = v
+        opt.textContent = v + (v === current ? '（当前）' : '')
+        sel.appendChild(opt)
+      }
+      sel.value = (current && versions.includes(current)) ? current : versions[0]
+    }
+
+    async function doInstall(version) {
+      if (installing) return
+      installing = true
+      const btn = document.getElementById('dsh-install')
+      btn.disabled = true
+      btn.textContent = '安装中…'
+      setDshMsg(`正在安装 @deepseek-ai/dsh@${version}，可能需要一两分钟…`)
+      try {
+        const res = await window.shell.dsh.install(version)
+        if (res.ok) {
+          setDshMsg(`${res.message}。DSH 已自动启动。`)
+          setTimeout(() => closeInstallPanel(), 1200)
+        } else {
+          setDshMsg(res.message || '安装失败', true)
+        }
+      } catch (err) {
+        setDshMsg('安装过程出错：' + (err && err.message ? err.message : err), true)
+      } finally {
+        installing = false
+        btn.disabled = false
+        btn.textContent = '安装'
+      }
+    }
+
+    // 实时安装进度：显示 npm 输出的最后一行（模块级挂一次，不重复挂）
+    // 面板打开时就更新——安装可能是主进程菜单路径发起的，本地 installing 锁不代表全部
+    window.shell.dsh.onInstallProgress((line) => {
+      if (!installing && !dshPanel.classList.contains('open')) return
+      const last = String(line).trim().split('\n').filter(Boolean).pop()
+      if (last) setDshMsg(`安装中… ${last.slice(-90)}`)
+    })
+
+    // 主进程状态广播：安装/重启都结束时解锁按钮（覆盖菜单路径发起的安装）
+    window.shell.dsh.onStatusChanged((st) => {
+      if (!st || st.installing || st.restarting) return
+      if (installing) {
+        installing = false
+        const btn = document.getElementById('dsh-install')
+        btn.disabled = false
+        btn.textContent = '安装'
+      }
+    })
+
+    document.getElementById('dsh-install').onclick = () => {
+      const v = document.getElementById('dsh-versions').value
+      if (v) doInstall(v)
+    }
+
+    // 主进程右键菜单「安装 / 更换版本」→ 打开本面板
+    window.shell.dsh.onOpenInstallPanel(() => openInstallPanel())
+
+    // ---------- 快捷键设置面板 ----------
+    const scPanel = document.getElementById('sc-panel')
+    const scMsgEl = document.getElementById('sc-msg')
+
+    function keyLabel(sc) {
+      if (!sc || !sc.key) return '未设置'
+      const p = []
+      if (sc.meta) p.push(isMac ? '⌘' : 'Win')
+      if (sc.control) p.push(isMac ? '⌃' : 'Ctrl')
+      if (sc.alt) p.push(isMac ? '⌥' : 'Alt')
+      if (sc.shift) p.push('⇧')
+      const names = { ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Tab: 'Tab', ' ': 'Space' }
+      p.push(names[sc.key] || (sc.key.length === 1 ? sc.key.toUpperCase() : sc.key))
+      return p.join(isMac ? '' : '+')
+    }
+
+    function updateScButtons() {
+      const prevBtn = document.getElementById('sc-prev')
+      const nextBtn = document.getElementById('sc-next')
+      const backBtn = document.getElementById('sc-back')
+      const fwdBtn = document.getElementById('sc-forward')
+      prevBtn.textContent = recordingKey === 'prev' ? '按下组合键…' : keyLabel(draftSc && draftSc.prev)
+      nextBtn.textContent = recordingKey === 'next' ? '按下组合键…' : keyLabel(draftSc && draftSc.next)
+      if (backBtn) backBtn.textContent = recordingKey === 'back' ? '按下组合键…' : keyLabel(draftSc && draftSc.back)
+      if (fwdBtn) fwdBtn.textContent = recordingKey === 'forward' ? '按下组合键…' : keyLabel(draftSc && draftSc.forward)
+      prevBtn.classList.toggle('recording', recordingKey === 'prev')
+      nextBtn.classList.toggle('recording', recordingKey === 'next')
+      if (backBtn) backBtn.classList.toggle('recording', recordingKey === 'back')
+      if (fwdBtn) fwdBtn.classList.toggle('recording', recordingKey === 'forward')
+    }
+
+    function scMsg(t, isErr) { scMsgEl.textContent = t || ''; scMsgEl.className = 'dsh-msg' + (isErr ? ' err' : '') }
+
+    function stopRecording() {
+      if (!recordingKey) return
+      recordingKey = null
+      window.shell.setShortcutRecording(false)
+      updateScButtons()
+    }
+
+    async function openShortcutsPanel() {
+      closeAddForm(); closeInstallPanel(); closeNotificationsPanel()
+      draftSc = await window.shell.getShortcuts()
+      recordingKey = null
+      scMsg('')
+      document.getElementById('sc-hint').textContent = `位置切换固定为 ${isMac ? '⌘' : 'Ctrl+'}1 ~ 9（不可修改）`
+      updateScButtons()
+      scPanel.classList.add('open')
+      window.shell.setAddFormOpen(true)
+    }
+
+    function closeShortcutsPanel() {
+      stopRecording()
+      scPanel.classList.remove('open')
+      window.shell.setAddFormOpen(false)
+    }
+
+    window.shell.onOpenShortcuts(() => openShortcutsPanel())
+
+    function findShortcutConflict(sc) {
+      if (!sc) return null
+      const keys = ['prev', 'next', 'back', 'forward']
+      const names = { prev: '上一个应用', next: '下一个应用', back: '网页后退', forward: '网页前进' }
+      for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+          const a = sc[keys[i]]
+          const b = sc[keys[j]]
+          if (!a || !b || !a.key || !b.key) continue
+          const sameKey = a.key === b.key || (typeof a.key === 'string' && typeof b.key === 'string' && a.key.toLowerCase() === b.key.toLowerCase())
+          if (sameKey
+              && Boolean(a.meta) === Boolean(b.meta)
+              && Boolean(a.control) === Boolean(b.control)
+              && Boolean(a.alt) === Boolean(b.alt)
+              && Boolean(a.shift) === Boolean(b.shift)) {
+            return `「${names[keys[i]]}」与「${names[keys[j]]}」快捷键冲突`
+          }
+        }
+      }
+      return null
+    }
+
+    document.getElementById('sc-prev').onclick = () => { stopRecording(); recordingKey = 'prev'; window.shell.setShortcutRecording(true); updateScButtons() }
+    document.getElementById('sc-next').onclick = () => { stopRecording(); recordingKey = 'next'; window.shell.setShortcutRecording(true); updateScButtons() }
+    document.getElementById('sc-back').onclick = () => { stopRecording(); recordingKey = 'back'; window.shell.setShortcutRecording(true); updateScButtons() }
+    document.getElementById('sc-forward').onclick = () => { stopRecording(); recordingKey = 'forward'; window.shell.setShortcutRecording(true); updateScButtons() }
+    document.getElementById('sc-close').onclick = closeShortcutsPanel
+    document.getElementById('sc-reset').onclick = async () => {
+      draftSc = await window.shell.resetShortcuts()
+      scMsg('已恢复默认')
+      updateScButtons()
+    }
+    document.getElementById('sc-save').onclick = async () => {
+      stopRecording()
+      const conflict = findShortcutConflict(draftSc)
+      if (conflict) { scMsg(conflict, true); return }
+      const r = await window.shell.setShortcuts(JSON.parse(JSON.stringify(draftSc)))
+      scMsg(r.ok ? '已保存，立即生效' : '保存失败', !r.ok)
+      if (r.ok) setTimeout(closeShortcutsPanel, 800)
+    }
+
+    // 组合键录制：capture 阶段抢在页面前面；录制期间主进程已暂停切换快捷键响应
+    window.addEventListener('keydown', (e) => {
+      if (!recordingKey) return
+      e.preventDefault(); e.stopPropagation()
+      if (e.key === 'Escape') { stopRecording(); scMsg('已取消录制'); return }
+      if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return // 纯修饰键不录
+      if (!e.metaKey && !e.ctrlKey && !e.altKey) { scMsg('需要带修饰键（⌘ / ⌃ / ⌥）', true); return }
+      if ((isMac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && /^[1-9]$/.test(e.key)) {
+        scMsg(`不能占用位置切换键 ${isMac ? '⌘' : 'Ctrl+'}${e.key}`, true)
+        return
+      }
+      draftSc[recordingKey] = { key: e.key, meta: e.metaKey, control: e.ctrlKey, alt: e.altKey, shift: e.shiftKey }
+      stopRecording()
+      scMsg('')
+    }, true)
+
+    // ---------- 通知设置面板 ----------
+    const ntPanel = document.getElementById('nt-panel')
+    const ntToggle = document.getElementById('nt-toggle')
+    const ntHint = document.getElementById('nt-hint')
+
+    function updateNtToggle(on) {
+      ntToggle.classList.toggle('on', Boolean(on))
+      ntToggle.setAttribute('aria-pressed', on ? 'true' : 'false')
+    }
+
+    async function openNotificationsPanel() {
+      closeAddForm(); closeInstallPanel(); closeShortcutsPanel()
+      const st = await window.shell.getNotifications()
+      updateNtToggle(st.enabled)
+      ntHint.textContent = st.supported
+        ? '首次开启时，系统可能会询问是否允许 DSH+ 发送通知。'
+        : '当前系统不支持桌面通知。'
+      ntPanel.classList.add('open')
+      window.shell.setAddFormOpen(true)
+      window.shell.setNotificationsPanelOpen(true)
+    }
+
+    function closeNotificationsPanel() {
+      ntPanel.classList.remove('open')
+      window.shell.setAddFormOpen(false)
+      window.shell.setNotificationsPanelOpen(false)
+    }
+
+    window.shell.onOpenNotifications(() => openNotificationsPanel())
+
+    ntToggle.onclick = async () => {
+      const next = !ntToggle.classList.contains('on')
+      const r = await window.shell.setNotifications({ enabled: next })
+      if (r.ok) {
+        updateNtToggle(r.enabled)
+        ntHint.textContent = r.enabled ? '已开启；后台有新完成或待交互时会通知。' : '已关闭；仅保留工具栏气泡与 Dock 角标。'
+      }
+    }
+    document.getElementById('nt-close').onclick = closeNotificationsPanel
+
+    // 手动拖拽窗口：只在工具栏空白处按下才拖（按钮上按下不拖），窗口跟随光标
+    let dragging = false
+    toolbar.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return
+      if (e.target.closest('.app-btn') || e.target.closest('.fin-btn') || e.target.closest('#add-form')) return
+      dragging = true
+      window.shell.dragStart()
+    })
+    window.addEventListener('mouseup', () => {
+      if (dragging) { dragging = false; window.shell.dragEnd() }
+    })
+
+    window.shell.getApps().then(render)
+    window.shell.onAppsChanged(render)
+
+    // ---------- 显示面：按 appId 把 Item 画到对应应用旁（增量更新） ----------
+    window.shell.surface.getState().then((s) => { surfaceState = s; syncSurface() })
+    window.shell.surface.onUpdate((items) => { surfaceState = { items }; syncSurface() })
+
+    // ---------- 应用图标角标（Windows）：主进程请功能区渲染计数图标 ----------
+    // macOS/Linux 的 Dock 计数由主进程 setBadgeCount 直接做，不经过这里。
+    // 画布 64×64（overlay 会被缩到 16px 档，大底缩小保清晰）；计数 >99 显示 99+。
+    function renderBadgeIcon(n) {
+      const S = 64
+      const c = document.createElement('canvas')
+      c.width = S
+      c.height = S
+      const g = c.getContext('2d')
+      g.fillStyle = '#dc2626' // 与条目带红气泡同色
+      g.beginPath()
+      g.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2)
+      g.fill()
+      const text = n > 99 ? '99+' : String(n)
+      g.fillStyle = '#fff'
+      g.font = `bold ${text.length > 1 ? 30 : 38}px -apple-system, "Segoe UI", sans-serif`
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillText(text, S / 2, S / 2 + 2)
+      return c.toDataURL('image/png')
+    }
+    window.shell.onRenderBadge((n) => {
+      let url = null
+      try { url = n > 0 ? renderBadgeIcon(n) : null } catch { url = null }
+      window.shell.sendBadgeIcon(url, n)
+    })
+  </script>
+</body>
+</html>

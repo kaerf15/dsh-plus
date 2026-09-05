@@ -1,0 +1,56 @@
+{
+  "name": "dsh-plus",
+  "productName": "DSH+",
+  "version": "0.1.8",
+  "private": false,
+  "license": "MIT",
+  "author": "kaerf15 <973007435@qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kaerf15/dsh-plus.git"
+  },
+  "description": "DSH+：给 DSH web（127.0.0.1:3080）套原生桌面窗口的多应用容器。与 DSH 版本完全解耦——DSH 怎么升级都不用重打包这个壳。",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --dir",
+    "dist:signed": "bash scripts/mac-dist-signed.sh",
+    "sign:cert": "bash scripts/mac-create-signing-cert.sh"
+  },
+  "devDependencies": {
+    "electron": "43.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "electronDist": "node_modules/electron/dist",
+    "appId": "com.dshplus.app",
+    "productName": "DSH+",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "lib/**/*",
+      "recipes/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.png",
+      "extendInfo": {
+        "NSDesktopFolderUsageDescription": "DSH+ 需要访问「桌面」，以读取和写入你放在桌面的 DSH 项目文件。",
+        "NSDocumentsFolderUsageDescription": "DSH+ 需要访问「文稿」，以读取和写入你放在文稿中的 DSH 项目文件。",
+        "NSDownloadsFolderUsageDescription": "DSH+ 需要访问「下载」，以读取和写入你放在下载中的 DSH 项目文件。"
+      },
+      "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "icon": "assets/icon.png"
+    }
+  }
+}

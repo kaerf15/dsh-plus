@@ -1,0 +1,14 @@
+{
+  "protocol": "dsh-plus.recipe",
+  "version": 1,
+  "domain": "piweb",
+  "source": { "type": "http", "url": "http://127.0.0.1:30141/api/sessions", "intervalMs": 3000 },
+  "items": [
+    {
+      "id": "piweb:busy",
+      "kind": "badge",
+      "semantic": "busy",
+      "foreach": { "where": { "runningSessionIds": { "nonEmpty": true } } }
+    }
+  ]
+}

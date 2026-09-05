@@ -1,21 +1,40 @@
 # DSH+
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) web（`127.0.0.1:3080`）套一个**原生桌面窗口**的多应用容器。
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 套一个**原生桌面窗口**的多应用壳。它不止是"桌面版"，更把多智能体协作里最容易被忽略的**消息通知**补齐成刚需功能。
 
-> 核心思想：**壳与内容解耦**——DSH 本体和插件在 `~/.dsh` 里照常更新，壳内部不绑版本，平时不用跟着 DSH 升级重打包。应用区是独立的 WebContentsView，Cookies / Local Storage 随壳保留。
+![DSH+ 界面](screenshots/dsh-plus.png)
 
-顶部一条自绘功能区（工具栏）+ 下方应用区；默认内置 **DSH**，可点 `+` 添加任意 `http(s)` 本地服务或网页（如 pi-web）。macOS / Windows 共用一套代码。
+![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-8A2BE2) ![dsh](https://img.shields.io/badge/dsh-any%20version-8A2BE2)
 
-![license](https://img.shields.io/badge/license-MIT-green) ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-8A2BE2)
+## 它特别在哪
 
-## 功能亮点
+### 1. 不绑定任何 DSH 版本——为所有版本的 Harness 套一个壳
 
-- **免打包免签名运行**：`npm install && npm start` 直接用 Electron 跑起来，无需签名。
-- **自动连接 dsh web**：扫描本机端口自动命中 dsh 特征（title / 脚本路径），也能 `+` 手动添加任意应用；不支持写死端口。
-- **会话状态显示面**：功能区的 **Fact → Item → Hub** 管道把进行中会话、待交互/未读气泡、Dock 角标、系统通知渲染成直观的角标与气泡（配合 `plugins/dsh-plus-surface`）。
-- **托盘的守护**：关窗口不退出，鲸鱼图标保留；完全退出时才停止当前端口上的 dsh，保持桌面干净。
-- **原生右键兜底**：给页面补裁剪/复制/粘贴、链接、图片、刷新、开发者工具等原生右键，并自动避开页面自有菜单。
-- **本地应用启动器**：在 `recipes/recipe.json` 里加一条即可出现在 DSH 右侧条目带，一键 `shell.openPath` 启动任意应用。
+**壳与内容彻底解耦。** DSH 本体和插件在 `~/.dsh` 里照常更新升级，壳内部**不绑死版本号**。所以 **DSH 每发一次新版本，你不用跟着重新打包这个壳**——它天然兼容任意版本，装完即用。
+
+### 2. 消息通知——多智能体协作的刚需
+
+装上插件后，**无论你的 DSH 在本地还是远程**，都能拿到消息通知：
+
+- 会话**完成**、**等待你回应**（待交互/未读）时，壳会推给你系统通知。
+- 除了 DSH 会话，**你也可以把其他消息源推到上面**，统一收口。
+- 通知图标采用苹果 **Touch Bar** 的设计灵感——功能区就是一条"外接状态条"，把进行中会话数、待交互/未读气泡、Dock 角标、系统通知渲染成直观的状态。
+
+> **需要在系统里开启。** 系统通知默认是**关闭**的，用之前请先开启：鲸鱼右键 → **「通知设置」**，并在**macOS 系统设置 → 通知 → DSH+** 里允许通知。只在壳退到后台时才推送，前台不打扰。
+
+### 3. 兼容 pi-web，也能加任何网页
+
+不只是 DSH。**当你也在用 pi-web**（本地或远程），装上对应插件后同样能收到"消息完成通知"。而且功能区的 `+` 可以添加**任意 `http(s)` 本地服务或网页**——把常用的工具都收进一个桌面窗口里。
+
+## 核心能力
+
+- **免打包免签名运行**：`npm install && npm start` 直接跑，无需签名。
+- **自动连接 dsh web**：扫描本机端口命中 dsh 特征，也能 `+` 手动加任意应用（不写死端口）。
+- **消息通知**：完成 / 待交互系统通知，仅后台推送（需在系统里开启）。
+- **显示面管道**：功能区 **Fact → Item → Hub** 把会话状态渲染成角标与气泡（配 `plugins/dsh-plus-surface`）。
+- **托盘守护**：关窗口不退出，鲸鱼图标保留；完全退出时才停止当前端口上的 dsh。
+- **原生右键兜底**：补裁剪/复制/粘贴、链接、图片、刷新、开发者工具，并避开页面自有菜单。
+- **本地应用启动器**：在 `recipes/recipe.json` 加一条即可出现在条目带，一键启动任意应用。
 
 ## 运行
 

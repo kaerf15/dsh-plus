@@ -3,6 +3,15 @@
   "version": "0.1.2",
   "description": "DSH+ 显示面的 pi 侧事实插件：把每个 pi 会话的进行中/结束/命名事实写成分片文件（~/.pi/dsh-plus/facts/），供 DSH+ 壳合并出角标与气泡。TUI 与 pi-web（RPC 模式）通用。",
   "type": "module",
+  "license": "MIT",
+  "author": "kaerf15 <973007435@qq.com>",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "dsh-plus",
+    "notification"
+  ],
   "pi": {
     "extensions": ["./index.ts"]
   },

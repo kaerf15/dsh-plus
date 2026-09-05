@@ -14,6 +14,8 @@
 
 ### 2. 消息通知——多智能体协作的刚需
 
+> ⚠️ **消息通知需要装插件**（`dsh-plus-surface` / `pi-dsh-plus-surface`），壳本身**不内置**通知能力。**未装插件时**只降级为轮询角标，**不会有系统通知**。装法见下文「会话状态与显示面」。
+
 装上插件后，**无论你的 DSH 在本地还是远程**，都能拿到消息通知：
 
 - 会话**完成**、**等待你回应**（待交互/未读）时，壳会推给你系统通知。
@@ -67,14 +69,21 @@ dsh **0.1.2+** 浏览器鉴权：壳在能拿到 launch token 时静默换 cooki
 
 消息角标/气泡的完整能力需要**两个插件**，分别接 DSH 侧和 pi 侧的事实：
 
-- **`plugins/dsh-plus-surface`**（v0.2.4）——dsh 侧事实桥。把 DSH 进程内的会话事实（进行中/结束/被查看）写成 `~/.dsh/dsh-plus/bridge.json`，并为壳提供页面内会话跳转入口。
-- **`plugins/pi-dsh-plus-surface`**（v0.1.2）——pi 侧事实插件。把每个 pi 会话的进行中/结束/命名事实写成**分片文件**（`~/.pi/dsh-plus/facts/<sessionId>.json`），壳读目录合并出角标与气泡。**TUI 与 pi-web 通用**（全局装一次两边都生效）。
+- **`dsh-plus-surface`**（已发布 npm，v0.2.4）——dsh 侧事实桥。把 DSH 进程内的会话事实（进行中/结束/被查看）写成 `~/.dsh/dsh-plus/bridge.json`，并为壳提供页面内会话跳转入口。
+- **`pi-dsh-plus-surface`**（已发布 npm，v0.1.2）——pi 侧事实插件。把每个 pi 会话的进行中/结束/命名事实写成**分片文件**（`~/.pi/dsh-plus/facts/<sessionId>.json`），壳读目录合并出角标与气泡。**TUI 与 pi-web 通用**（全局装一次两边都生效）。
 
-装 dsh 侧插件：
+**装 dsh 侧插件**（npm 安装）：
 
 ```bash
-dsh plugin --profile web add <本仓库 plugins/dsh-plus-surface 绝对路径>
+dsh plugin --profile web add dsh-plus-surface
 # 部署到 ~/.dsh/profiles/web 后在该目录 pnpm install --force 重打包
+```
+
+**装 pi 侧插件**（pi packages，npm 源）：
+
+```bash
+pi install npm:pi-dsh-plus-surface
+# 或写入 ~/.pi/agent/settings.json 的 "packages": ["npm:pi-dsh-plus-surface@0.1.2"]
 ```
 
 - **进行中**：DSH 图标左上角绿色角标（进行中会话数）

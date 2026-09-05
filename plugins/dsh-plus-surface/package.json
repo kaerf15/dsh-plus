@@ -3,6 +3,16 @@
   "version": "0.2.4",
   "description": "DSH+ 壳的事实桥：把 dsh 进程内的会话事实（进行中/结束/被查看）写成 ~/.dsh/dsh-plus/bridge.json，并为壳提供页面内会话跳转入口。",
   "type": "module",
+  "license": "MIT",
+  "author": "kaerf15 <973007435@qq.com>",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cordis",
+    "dsh-plus",
+    "notification"
+  ],
   "main": "index.js",
   "exports": {
     ".": "./index.js",

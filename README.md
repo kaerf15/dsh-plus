@@ -103,16 +103,16 @@ pi install npm:pi-dsh-plus-surface
 
 从 [Releases](https://github.com/kaerf15/dsh-plus/releases) 直接下载即可，**无需自己打包**。
 
-**macOS（.dmg，已签名、未公证）**
+**macOS（仅 arm64：`DSH+-0.1.8-arm64.dmg`）**
 
-Release 里的 arm64 包已用 **Apple Development** 证书签名（Hardened Runtime），**通知中心可用**。尚未做 Apple 公证，也不是 Developer ID，网上下载后 Gatekeeper 仍会拦截，需要手动允许一次：
+官方只发这一份 DMG：已用 Apple Development 签名（Hardened Runtime），通知中心可用；未公证，网上下载后 Gatekeeper 会拦一次。
 
 1. 双击 `DSH+-0.1.8-arm64.dmg`，把 **DSH+** 拖进「应用程序」。
 2. 首次打开若弹出 **“无法验证开发者”** 或 **“Apple 无法确认是否含恶意软件”**，右键 DSH+ → **打开**，再点 **“打开”**。
 3. 仍被拦截：**系统设置 → 隐私与安全性** → **“仍要打开”**。
-4. 若提示 App 已损坏：在终端执行 `xattr -dr com.apple.quarantine /Applications/DSH+.app`。
+4. 若提示 App 已损坏：`xattr -dr com.apple.quarantine /Applications/DSH+.app`。
 
-装好后打开通知：系统设置 → 通知 → DSH+，再在鲸鱼菜单 → **「通知设置」** 打开开关。
+装好后：系统设置 → 通知 → DSH+，再在鲸鱼菜单 → **「通知设置」** 打开开关。
 
 **Windows（.exe，未签名）**
 
@@ -120,13 +120,9 @@ Release 里的 arm64 包已用 **Apple Development** 证书签名（Hardened Run
 2. SmartScreen 若弹出 **“Windows 已保护你的电脑”**，点 **“更多信息”** → **“仍要运行”**。
 3. 若被杀软拦截，放行一次即可。
 
-> 要别人双击即用、完全不碰 Gatekeeper，需要换 **Developer ID Application** 签名并做 Apple 公证。当前发布包还没有这一步。Windows 要去掉 SmartScreen，需在 electron-builder 里配置代码签名证书（见 [Code Signing](https://www.electron.build/code-signing)）。
-
 ### macOS 通知中心
 
-> ⚠️ 只有已签名的 `.app` 才能把消息推到「通知中心」。Release 里的 macOS DMG **已经签名**，按上面允许 Gatekeeper 并打开通知即可。未签名的源码运行（`npm start`）只能显示功能区 / Dock 角标，`new Notification()` 会被系统静默丢弃。
->
-> 自己从源码打签名包：`npm run dist:signed`（签 `.app`、打出 DMG，并安装到 `/Applications/DSH+.app`）。若装到 `/Applications` 后校验报 *"resource fork / Finder information detritus"*，是同步盘给 bundle 加了扩展属性，清掉即可：`xattr -dr com.apple.fileprovider.fpfs#P /Applications/DSH+.app` 和 `xattr -dr com.apple.FinderInfo /Applications/DSH+.app`。
+> ⚠️ 只有已签名的 `.app` 才能把消息推到「通知中心」。请用上面这份 Release DMG。`npm start` 未签名，只能显示功能区 / Dock 角标。
 
 ## 源码打包（可选）
 
@@ -134,7 +130,7 @@ Release 里的 arm64 包已用 **Apple Development** 证书签名（Hardened Run
 
 ```bash
 npm run dist              # electron-builder --dir → dist/mac-arm64/DSH+.app 或 dist/win-unpacked/
-npm run dist:signed       # macOS：签名、打 DMG，并安装到 /Applications/DSH+.app
+npm run dist:signed       # macOS arm64：签名、打出这一份 DMG，并安装到 /Applications/DSH+.app
 ```
 
 自用开发直接 `npm start` 即可，不必打包。

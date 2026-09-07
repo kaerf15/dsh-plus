@@ -37,7 +37,14 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.png",
-      "target": "dmg",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "extendInfo": {
         "NSDesktopFolderUsageDescription": "DSH+ 需要访问「桌面」，以读取和写入你放在桌面的 DSH 项目文件。",
         "NSDocumentsFolderUsageDescription": "DSH+ 需要访问「文稿」，以读取和写入你放在文稿中的 DSH 项目文件。",

@@ -99,36 +99,34 @@ pi install npm:pi-dsh-plus-surface
 
 添加 `http://127.0.0.1:<pi-web端口>` 为应用；busy 灯走 HTTP 轮询 `/api/sessions`。完整会话气泡需装 `plugins/pi-dsh-plus-surface`。**pi-web 装在远程电脑上也可以**——在功能区 `+` 添加远程地址（如 `http://192.168.1.20:<pi-web端口>`，或经端口映射/隧道暴露的地址），远端装了 `pi-dsh-plus-surface` 插件后，`serve-facts.mjs` 会提供 HTTP 只读事实出口（默认 `DSH_PLUS_FACTS_PORT` 3099），壳拉取后同样能出角标、完成气泡与消息通知。pi-web 的 GitHub 仓库见 [agegr/pi-web](https://github.com/agegr/pi-web)。
 
-## 下载安装包（未签名）
+## 下载安装包
 
-从 [Releases](https://github.com/kaerf15/dsh-plus/releases) 直接下载安装包即可，**无需自己打包**。安装包**当前未签名**（macOS 无 Apple Developer 证书、Windows 无代码签名证书），因此首次运行会被系统拦截，需要手动允许一次：
+从 [Releases](https://github.com/kaerf15/dsh-plus/releases) 直接下载即可，**无需自己打包**。
 
-**macOS（.dmg）**
+**macOS（.dmg，已签名、未公证）**
+
+Release 里的 arm64 包已用 **Apple Development** 证书签名（Hardened Runtime），**通知中心可用**。尚未做 Apple 公证，也不是 Developer ID，网上下载后 Gatekeeper 仍会拦截，需要手动允许一次：
+
 1. 双击 `DSH+-0.1.8-arm64.dmg`，把 **DSH+** 拖进「应用程序」。
-2. 首次打开若弹出 **“无法验证开发者”**，右键 DSH+ → **打开**，再点 **“打开”** 确认。
-3. 如果仍被拦截：**系统设置 → 隐私与安全性**，在「安全性」里点 **“仍要打开”**。
+2. 首次打开若弹出 **“无法验证开发者”** 或 **“Apple 无法确认是否含恶意软件”**，右键 DSH+ → **打开**，再点 **“打开”**。
+3. 仍被拦截：**系统设置 → 隐私与安全性** → **“仍要打开”**。
+4. 若提示 App 已损坏：在终端执行 `xattr -dr com.apple.quarantine /Applications/DSH+.app`。
 
-**Windows（.exe）**
+装好后打开通知：系统设置 → 通知 → DSH+，再在鲸鱼菜单 → **「通知设置」** 打开开关。
+
+**Windows（.exe，未签名）**
+
 1. 双击 `DSH+ Setup 0.1.8.exe` 安装。
 2. SmartScreen 若弹出 **“Windows 已保护你的电脑”**，点 **“更多信息”** → **“仍要运行”**。
 3. 若被杀软拦截，放行一次即可。
 
-> 想彻底去掉这些提示，可自备证书：macOS 用 `npm run dist:signed`（需 Apple Development 证书），Windows 在 electron-builder 里配置签名证书（见 [Code Signing](https://www.electron.build/code-signing)）后重新打包。
+> 要别人双击即用、完全不碰 Gatekeeper，需要换 **Developer ID Application** 签名并做 Apple 公证。当前发布包还没有这一步。Windows 要去掉 SmartScreen，需在 electron-builder 里配置代码签名证书（见 [Code Signing](https://www.electron.build/code-signing)）。
 
-### macOS 通知中心：需要签名
+### macOS 通知中心
 
-> ⚠️ 对 **macOS** 而言，**只有已签名的 .app 才能把气泡/消息推送到「通知中心」**。当前发布的未签名包虽然能显示**前台角标/气泡**（功能区、Dock 角标），但 **`new Notification()` 会被系统静默丢弃**，通知中心里看不到。
+> ⚠️ 只有已签名的 `.app` 才能把消息推到「通知中心」。Release 里的 macOS DMG **已经签名**，按上面允许 Gatekeeper 并打开通知即可。未签名的源码运行（`npm start`）只能显示功能区 / Dock 角标，`new Notification()` 会被系统静默丢弃。
 >
-> **想要 macOS 弹出「通知中心」的消息，需要在已签名的 .app 上运行，并让 macOS 授权通知：**
->
-> 1. 用 `npm run dist:signed` 签一个自己的版本（脚本会从本机钥匙串找一个 Apple 开发证书来签名并安装到 `/Applications/DSH+.app`）。
-> 2. 在 **系统设置 → 通知 → DSH+** 里允许通知，再在 DSH+ 鲸鱼菜单 → **「通知设置」** 打开开关。
-> 3. 首次双击启动若被 Gatekeeper 拦截（Apple 开发证书**未公证**，外部下载必然触发），右键 DSH+ → **打开** 允许即可。
->
-> > 📌 说明：`npm run dist:signed` 签名后请先验证签名有效（`codesign --verify --deep --strict /Applications/DSH+.app`）。若安装到 `/Applications` 后校验报 *"resource fork / Finder information detritus"*，是同步盘（如 iCloud/桌面）给 bundle 加了额外扩展属性所致，清掉即可：`xattr -dr com.apple.fileprovider.fpfs#P /Applications/DSH+.app` 和 `xattr -dr com.apple.FinderInfo /Applications/DSH+.app`。
->
-> - **Apple 开发证书**：适合本机/开发者设备，签完通知中心可用，但**未公证**，给任何人下载双击会被 Gatekeeper 拦（需右键打开）。
-> - 若要给**外部用户**任意下载且开箱即用，需换 **Developer ID Application** 证书签名并做 **Apple 公证**（notarization）。
+> 自己从源码打签名包：`npm run dist:signed`（签 `.app`、打出 DMG，并安装到 `/Applications/DSH+.app`）。若装到 `/Applications` 后校验报 *"resource fork / Finder information detritus"*，是同步盘给 bundle 加了扩展属性，清掉即可：`xattr -dr com.apple.fileprovider.fpfs#P /Applications/DSH+.app` 和 `xattr -dr com.apple.FinderInfo /Applications/DSH+.app`。
 
 ## 源码打包（可选）
 
@@ -136,7 +134,7 @@ pi install npm:pi-dsh-plus-surface
 
 ```bash
 npm run dist              # electron-builder --dir → dist/mac-arm64/DSH+.app 或 dist/win-unpacked/
-npm run dist:signed       # macOS：签名并安装到 /Applications/DSH+.app（需 Apple Development 证书）
+npm run dist:signed       # macOS：签名、打 DMG，并安装到 /Applications/DSH+.app
 ```
 
 自用开发直接 `npm start` 即可，不必打包。

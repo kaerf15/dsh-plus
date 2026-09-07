@@ -115,6 +115,20 @@ pi install npm:pi-dsh-plus-surface
 
 > 想彻底去掉这些提示，可自备证书：macOS 用 `npm run dist:signed`（需 Apple Development 证书），Windows 在 electron-builder 里配置签名证书（见 [Code Signing](https://www.electron.build/code-signing)）后重新打包。
 
+### macOS 通知中心：需要签名
+
+> ⚠️ 对 **macOS** 而言，**只有已签名的 .app 才能把气泡/消息推送到「通知中心」**。当前发布的未签名包虽然能显示**前台角标/气泡**（功能区、Dock 角标），但 **`new Notification()` 会被系统静默丢弃**，通知中心里看不到。
+>
+> 想让 macOS 弹出**系统通知中心**的消息，请签一个自己的版本：
+>
+> ```bash
+> npm run dist:signed
+> ```
+>
+> - 该脚本从本机钥匙串找一个 **Apple Development 证书** 来签名（优先 `DSH_PLUS_SIGN_IDENTITY`，其次现成的 Apple 证书），并把 DSH+ 安装到 `/Applications/DSH+.app`。
+> - 签名后，在 **系统设置 → 通知 → DSH+** 里允许通知，再在 DSH+ 鲸鱼菜单 → **「通知设置」** 里打开开关，即可收到通知中心弹窗。
+> - 如果你要用这个签名包给**外部用户**下载，建议用 **Developer ID Application** 证书签名并做 **Apple 公证**（notarization）——`Apple Development` 证书主要用于本机/开发者设备。
+
 ## 源码打包（可选）
 
 你自己改源码后想重新打包：

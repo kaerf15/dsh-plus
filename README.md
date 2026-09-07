@@ -119,15 +119,16 @@ pi install npm:pi-dsh-plus-surface
 
 > ⚠️ 对 **macOS** 而言，**只有已签名的 .app 才能把气泡/消息推送到「通知中心」**。当前发布的未签名包虽然能显示**前台角标/气泡**（功能区、Dock 角标），但 **`new Notification()` 会被系统静默丢弃**，通知中心里看不到。
 >
-> 想让 macOS 弹出**系统通知中心**的消息，请签一个自己的版本：
+> **想要 macOS 弹出「通知中心」的消息，需要在已签名的 .app 上运行，并让 macOS 授权通知：**
 >
-> ```bash
-> npm run dist:signed
-> ```
+> 1. 用 `npm run dist:signed` 签一个自己的版本（脚本会从本机钥匙串找一个 Apple 开发证书来签名并安装到 `/Applications/DSH+.app`）。
+> 2. 在 **系统设置 → 通知 → DSH+** 里允许通知，再在 DSH+ 鲸鱼菜单 → **「通知设置」** 打开开关。
+> 3. 首次双击启动若被 Gatekeeper 拦截（Apple 开发证书**未公证**，外部下载必然触发），右键 DSH+ → **打开** 允许即可。
 >
-> - 该脚本从本机钥匙串找一个 **Apple Development 证书** 来签名（优先 `DSH_PLUS_SIGN_IDENTITY`，其次现成的 Apple 证书），并把 DSH+ 安装到 `/Applications/DSH+.app`。
-> - 签名后，在 **系统设置 → 通知 → DSH+** 里允许通知，再在 DSH+ 鲸鱼菜单 → **「通知设置」** 里打开开关，即可收到通知中心弹窗。
-> - 如果你要用这个签名包给**外部用户**下载，建议用 **Developer ID Application** 证书签名并做 **Apple 公证**（notarization）——`Apple Development` 证书主要用于本机/开发者设备。
+> > 📌 说明：`npm run dist:signed` 签名后请先验证签名有效（`codesign --verify --deep --strict /Applications/DSH+.app`）。若安装到 `/Applications` 后校验报 *"resource fork / Finder information detritus"*，是同步盘（如 iCloud/桌面）给 bundle 加了额外扩展属性所致，清掉即可：`xattr -dr com.apple.fileprovider.fpfs#P /Applications/DSH+.app` 和 `xattr -dr com.apple.FinderInfo /Applications/DSH+.app`。
+>
+> - **Apple 开发证书**：适合本机/开发者设备，签完通知中心可用，但**未公证**，给任何人下载双击会被 Gatekeeper 拦（需右键打开）。
+> - 若要给**外部用户**任意下载且开箱即用，需换 **Developer ID Application** 证书签名并做 **Apple 公证**（notarization）。
 
 ## 源码打包（可选）
 

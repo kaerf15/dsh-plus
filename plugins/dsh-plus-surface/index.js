@@ -18,8 +18,8 @@
 //      挂路由，owner 是绑回 connection 插件纤维的 shadow 上下文，在那里访问
 //      webServer 撞 cordis 隔离边界（"cannot get property without inject"），
 //      同步抛出会连坐拆除整个 inject 纤维且无 stdout 报错——0.1.5 升级时气泡
-//      全灭的真凶。事件监听与 webServer 同挂一个 inject 纤维也有同样意义：
-//      任何一步抛错都不该拖死其余注册。
+//      全灭的真凶。同理，本纤维内三条 webServer 路由的注册经 registerRoute
+//      try/catch 隔离：任何一条抛错只丢该出口，不拖死 agent/* 事件监听。
 //   4. ctx.webServer.register({ kind, path, handler })
 //      （@deepseek-ai/dsh-host-webserver WebServer 服务；远端壳的 HTTP 事实出口用）
 //   5. ctx.connection.authenticatedUrl(baseUrl)
@@ -359,12 +359,21 @@ export function apply(ctx) {
     // ② HTTP 只读事实出口（GET /dsh-plus-surface/bridge.json）：远端壳经端口映射拉取用，
     // 与 bridge.json 同一份内存事实（buildBody）。双出口常开、零配置——本地壳读文件、
     // 远端壳走 HTTP，选择权在壳不在插件。安全口径：只读、随 dsh web 的环回绑定，不开新端口。
-    // webServer 服务不存在（非 web host）时此出口静默缺席，壳自动退到 session.list 轮询。
-    // webServer 与 connection 同一 inject 等待就位（见上方注释），这里直接用，不再嵌套 inject。
+    // webServer 与 connection 同一 inject 等待就位（见上方注释），到这里两服务必在。
     {
+      // 路由注册隔离：任何一条 register 同步抛错只丢该出口，不连坐拆除
+      // 本纤维的 agent/* 事件监听（0.1.5 气泡全灭案的同款机制，见文件头 §3）。
+      function registerRoute(route, label) {
+        try {
+          // effect 绑插件生命周期：HMR/重载时路由随上下文自动摘除，避免重复注册抛错（同 dsh-client-connection 写法）
+          connCtx.effect(() => connCtx.webServer.register(route), label)
+        } catch (err) {
+          connCtx.logger.warn(`[dsh-plus-surface] 路由注册失败（${route.path}）：${String(err)}`)
+        }
+      }
       // client→host 事实透传通道（POST JSON → applySync）。与只读出口同口径：
       // 环回绑定、不开新端口；同源页面 fetch 自带 cookie 会话。
-      connCtx.effect(() => connCtx.webServer.register({
+      registerRoute({
         kind: 'exact',
         path: SYNC_PATH,
         handler: (req, res) => {
@@ -394,9 +403,8 @@ export function apply(ctx) {
           })
           req.on('error', () => { /* 客户端中断：忽略 */ })
         },
-      }), 'dsh-plus-surface: sync route')
-      // effect 绑插件生命周期：HMR/重载时路由随上下文自动摘除，避免重复注册抛错（同 dsh-client-connection 写法）
-      connCtx.effect(() => connCtx.webServer.register({
+      }, 'dsh-plus-surface: sync route')
+      registerRoute({
         kind: 'exact',
         path: '/dsh-plus-surface/bridge.json',
         handler: (req, res) => {
@@ -408,11 +416,11 @@ export function apply(ctx) {
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
           res.end(JSON.stringify(buildBody()))
         },
-      }), 'dsh-plus-surface: facts route')
+      }, 'dsh-plus-surface: facts route')
       // 壳自动换证：0.1.2+ 无环回豁免，端口映射过来的实例壳拿不到 stdout 里的 token。
       // connection.authenticatedUrl 是公开 API；只对环回吐 token——能在对端本机连上
       // （含 SSH/端口映射在本机落地）≈ 本来就能读 stdout。LAN/WAN 仍走官方 token URL。
-      connCtx.effect(() => connCtx.webServer.register({
+      registerRoute({
         kind: 'exact',
         path: '/dsh-plus-surface/launch.json',
         handler: (req, res) => {
@@ -438,7 +446,7 @@ export function apply(ctx) {
           res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
           res.end(JSON.stringify({ token }))
         },
-      }), 'dsh-plus-surface: launch route')
+      }, 'dsh-plus-surface: launch route')
       connCtx.logger.info('[dsh-plus-surface] HTTP 事实出口就绪 → GET /dsh-plus-surface/bridge.json')
     }
   })

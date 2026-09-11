@@ -76,7 +76,7 @@ description: >-
 
 | 半 | 文件 | 做什么 |
 |---|---|---|
-| host | `index.js` | 听 `agent/created|status|disposed` 写进程级真相（status/runningSince/finishedAt）；RPC `/dsh-plus-surface` 收 `sync`（client 透传标量快照） |
+| host | `index.js` | 听 `agent/created|status|disposed` 写进程级真相（status/runningSince/finishedAt）；自有 HTTP 路由 `POST /dsh-plus-surface/sync` 收 client 透传标量快照（0.1.5 起 `rpc.handle` 撞 cordis 隔离边界不可用，详见 index.js 文件头 §3） |
 | client | `client.js` | 透传每个顶层会话的标量字段；`window.__dshPlus.handle({ type, target })` |
 
 事实文件（壳读这个，不是改 UI）：

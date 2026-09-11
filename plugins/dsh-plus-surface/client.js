@@ -88,13 +88,16 @@ window.__ModuleLoader__.load({
         function pendingSnap() {
           return uiSession.pendingInteractions ? uiSession.pendingInteractions.getSnapshot() : null
         }
-        function sync(id, fields) {
+        function sync(id, fields, key) {
           // 自有 HTTP 通道（host 半 POST /dsh-plus-surface/sync → applySync）；
-          // 同源 fetch 自带 cookie 会话，失败静默（下拍事件自然补）
+          // 同源 fetch 自带 cookie 会话。去重键只在 2xx 后落定：失败（host 重启、
+          // 升级期路由暂缺）不记 seen，下一拍列表/待交互事件自然重试，不丢上报。
           fetch(SYNC_PATH, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({ sessionId: id, clientId: clientId, fields: fields }),
+          }).then(function (res) {
+            if (key !== undefined && res.ok) seen[id] = key
           }).catch(function () {})
         }
         function flush() {
@@ -117,8 +120,7 @@ window.__ModuleLoader__.load({
             prevSelected[id] = id === current
             var key = JSON.stringify(fields)
             if (seen[id] === key) continue
-            seen[id] = key
-            sync(id, fields)
+            sync(id, fields, key) // seen 由 sync 在 2xx 后才落定，失败留下拍重试
           }
           for (var k in seen) {
             if (!byId[k]) {
@@ -134,11 +136,19 @@ window.__ModuleLoader__.load({
         flush()
         // 关页 best-effort 摘选中：不留死标记在 host 的 selectedBy 里
         // （残留的最坏后果是该会话下一轮完成后漏出一颗气泡）。
+        // 页面卸载期普通 fetch 多半被浏览器取消，必须用 sendBeacon 才真正可达；
+        // host 端不校验 content-type、直接 parse body，beacon 天然兼容。
         function onPageHide() {
           try {
             var snap = sessions.list.getSnapshot()
             var cur = snap && snap.current
-            if (cur) sync(cur, { selected: false })
+            if (!cur) return
+            var body = JSON.stringify({ sessionId: cur, clientId: clientId, fields: { selected: false } })
+            if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+              navigator.sendBeacon(SYNC_PATH, new Blob([body], { type: 'application/json' }))
+            } else {
+              sync(cur, { selected: false })
+            }
           } catch (e) { /* 页面 teardown 期拿不到快照就算了：best-effort */ }
         }
         if (typeof window !== 'undefined') window.addEventListener('pagehide', onPageHide)

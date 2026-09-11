@@ -1,31 +1,34 @@
 // dsh-plus-surface host 半（plugins/dsh-plus-surface/index.js）的桥文件行为测试。
-// mock cordis ctx：捕获 agent/* 事件处理器与 rpc handler，用临时 DSH_HOME 读真实桥文件。
+// mock cordis ctx：捕获 agent/* 事件处理器与 webServer 路由（sync 走 POST
+// /dsh-plus-surface/sync，0.1.5 起 rpc.handle 不可用），用临时 DSH_HOME 读真实桥文件。
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { EventEmitter } from 'node:events'
 import { mkdtempSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const { apply } = await import('../plugins/dsh-plus-surface/index.js')
 
-const CHANNEL = '/dsh-plus-surface'
+const SYNC_PATH = '/dsh-plus-surface/sync'
 
-/** 起一套插件实例：返回事件发射器 / rpc 调用器 / 桥文件路径。 */
+/** 起一套插件实例：返回事件发射器 / sync 调用器 / 桥文件路径。 */
 function setup() {
   const home = mkdtempSync(join(tmpdir(), 'dsh-plus-surface-test-'))
   process.env.DSH_HOME = home
   const handlers = new Map()
-  let rpcHandler = null
+  const routes = new Map()
   const connCtx = {
     on: (event, fn) => handlers.set(event, fn),
-    connection: { rpc: { handle: (channel, fn) => { assert.equal(channel, CHANNEL); rpcHandler = fn } } },
-    inject: () => {}, // webServer 段不在本测试范围
+    connection: { authenticatedUrl: () => '' },
+    webServer: { register: (route) => { routes.set(route.path, route.handler); return () => {} } },
+    effect: (fn) => { fn() },
     logger: { info: () => {}, warn: () => {} },
   }
   const ctx = {
     skills: { registerProvider: () => {} },
     on: () => {},
-    inject: (deps, fn) => { assert.deepEqual(deps, ['connection']); fn(connCtx) },
+    inject: (deps, fn) => { assert.deepEqual(deps, ['connection', 'webServer']); fn(connCtx) },
   }
   apply(ctx)
   const agent = (id) => ({ id, session: { header: {} } }) // 顶层会话（无 origin/parentSession）
@@ -34,8 +37,31 @@ function setup() {
     created: (id) => handlers.get('agent/created')({ agent: agent(id) }),
     status: (id, status) => handlers.get('agent/status')({ agent: agent(id), status }),
     disposed: (id) => handlers.get('agent/disposed')({ agent: agent(id) }),
-    sync: (sessionId, fields, clientId = 'c1') => rpcHandler('sync', { sessionId, clientId, fields }),
+    sync: (sessionId, fields, clientId = 'c1') => {
+      const handler = routes.get(SYNC_PATH)
+      assert.ok(handler, 'sync 路由已注册')
+      return postJson(handler, { sessionId, clientId, fields })
+    },
   }
+}
+
+/** 用假 req/res 同步驱动 sync 路由，返回解析后的响应 JSON。 */
+function postJson(handler, payload) {
+  return new Promise((resolve, reject) => {
+    const req = new EventEmitter()
+    req.method = 'POST'
+    req.socket = { remoteAddress: '127.0.0.1' }
+    req.destroy = () => reject(new Error('request destroyed (body too large?)'))
+    const res = {
+      writeHead() {},
+      end(body) {
+        try { resolve(JSON.parse(body)) } catch (err) { reject(err) }
+      },
+    }
+    handler(req, res)
+    req.emit('data', Buffer.from(JSON.stringify(payload)))
+    req.emit('end')
+  })
 }
 
 /** 写盘有 200ms 防抖：等它落盘。 */
@@ -143,8 +169,7 @@ test('disposed（running）：记一笔结束，且不算未看', async () => {
 test('sync：不认识的 id（subagent 等）一律忽略', async () => {
   const p = setup()
   const r = await p.sync('ghost', { selected: true })
-  assert.equal(r.ok, true)
-  assert.equal(r.value.accepted, false)
+  assert.equal(r.accepted, false)
   await settle()
   if (existsSync(p.file)) assert.equal(readBridge(p.file).sessions.ghost, undefined)
 })

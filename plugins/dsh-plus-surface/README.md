@@ -9,7 +9,7 @@ DSH+ 显示面的 dsh 侧插件：**事实出口 + 动作入口 + 唯一 Skill**
 
 | 半 | 环境 | 职责 |
 |---|---|---|
-| `index.js`（host） | dsh web host 进程 | 听 `agent/created\|status\|disposed` 维护进程级真相 `{status, runningSince, finishedAt}`，原子写桥文件；同时开 **HTTP 只读事实出口** `GET /dsh-plus-surface/bridge.json`（与桥文件同一份内存事实，供远端壳经端口映射拉取）；提供 `/dsh-plus-surface` RPC 通道，`sync` 端点合并 client 透传的标量快照（仅顶层会话、字段消失即清）；`ctx.skills.registerProvider` 只注册 `dsh-plus-surface`（rank 600）+ `skills/change` 钩子 |
+| `index.js`（host） | dsh web host 进程 | 听 `agent/created\|status\|disposed` 维护进程级真相 `{status, runningSince, finishedAt}`，原子写桥文件；同时开 **HTTP 只读事实出口** `GET /dsh-plus-surface/bridge.json`（与桥文件同一份内存事实，供远端壳经端口映射拉取）；client 透传的标量快照走自有 HTTP 路由 `POST /dsh-plus-surface/sync` 合并（仅顶层会话、字段消失即清；0.1.5 起 `connection.rpc.handle` 撞 cordis 隔离边界不可用，见 `index.js` 文件头 §3）；`ctx.skills.registerProvider` 只注册 `dsh-plus-surface`（rank 600）+ `skills/change` 钩子 |
 | `client.js`（client） | dsh web 页面 | 把每个顶层会话的可序列化标量字段整体透传给 host（`pendingInteraction` / `title` / `cwd` / …）并上报页面选中态（`selected`，host 据此推导 `completed`）；暴露 `window.__dshPlus.handle(action)` 通用动作入口（`open-session` 现可扩展）+ `jump` 兼容别名 |
 
 判断逻辑（进行中角标、已完成未看 / 待交互气泡、气泡生命周期）全部在壳的 `recipe.json` 里做纯字段匹配；本插件只透传事实、只执行壳发来的动作。CLI 进程不产事实（无 `connection` 服务即不启用事实桥）。
@@ -76,4 +76,4 @@ dsh plugin --profile web add <本目录绝对路径>
 
 ## 兼容基线
 
-`verifiedWith: 0.1.2-alpha.1`。私有面脆弱点逐条登记在 `index.js` / `client.js` 文件头注释。
+`verifiedWith: 0.1.5-rc.1`。私有面脆弱点逐条登记在 `index.js` / `client.js` 文件头注释。

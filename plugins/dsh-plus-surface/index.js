@@ -14,7 +14,10 @@
 //      （@deepseek-ai/dsh-agent runtime-types.ts 的 Events 声明）
 //   2. agent.session.header.origin/parentSession（isTopLevel 判定用；@deepseek-ai/dsh-session）
 //   3. ctx.connection.rpc.handle 自有通道 + ctx.webServer
-//      （@deepseek-ai/dsh-client-connection HostConnectionService）
+//      （@deepseek-ai/dsh-client-connection HostConnectionService；
+//      0.1.5 起 handle 内部经 owner.webServer.register 挂路由，调用当下 webServer
+//      必须已在同一上下文可用——故 connection 与 webServer 必须同一个 inject 等待，
+//      否则 TypeError 连坐拆除整个 inject 纤维，事件监听/路由全灭且无 stdout 报错）
 //   4. ctx.webServer.register({ kind, path, handler })
 //      （@deepseek-ai/dsh-host-webserver WebServer 服务；远端壳的 HTTP 事实出口用）
 //   5. ctx.connection.authenticatedUrl(baseUrl)
@@ -163,9 +166,12 @@ export function apply(ctx) {
     ctx.logger?.info?.('[dsh-plus-surface] skills/change：用户 skill 目录可能已变')
   })
 
-  // 有 connection 服务 = 本进程是 dsh web 的 host；CLI 进程不产事实，
-  // 避免 CLI / web 多进程写同一份桥文件。
-  ctx.inject(['connection'], (connCtx) => {
+  // 有 connection + webServer 服务 = 本进程是 dsh web 的 host；CLI 进程不产事实，
+  // 避免 CLI / web 多进程写同一份桥文件。两者必须同一个 inject 等待：0.1.5 起
+  // rpc.handle 内部立即经 owner.webServer.register 挂通道路由，webServer 后于
+  // connection 就绪时，先触发的一半会在 handle 处抛 TypeError，cordis 连坐拆除
+  // 整个纤维（已注册的事件监听同归于尽），且错误不进 stdout——曾致气泡全灭。
+  ctx.inject(['connection', 'webServer'], (connCtx) => {
     const dir = join(dshHome(), 'dsh-plus')
     const file = join(dir, 'bridge.json')
 
@@ -345,7 +351,7 @@ export function apply(ctx) {
       entry.cli = cli
       persist()
       return { ok: true, value: { accepted: true } }
-    }, { authority: 'trusted-host' })
+    })
 
     connCtx.logger.info(`[dsh-plus-surface] 事实桥就绪 → ${file}`)
 
@@ -353,9 +359,10 @@ export function apply(ctx) {
     // 与 bridge.json 同一份内存事实（buildBody）。双出口常开、零配置——本地壳读文件、
     // 远端壳走 HTTP，选择权在壳不在插件。安全口径：只读、随 dsh web 的环回绑定，不开新端口。
     // webServer 服务不存在（非 web host）时此出口静默缺席，壳自动退到 session.list 轮询。
-    connCtx.inject(['webServer'], (wsCtx) => {
+    // webServer 与 connection 同一 inject 等待就位（见上方注释），这里直接用，不再嵌套 inject。
+    {
       // effect 绑插件生命周期：HMR/重载时路由随上下文自动摘除，避免重复注册抛错（同 dsh-client-connection 写法）
-      wsCtx.effect(() => wsCtx.webServer.register({
+      connCtx.effect(() => connCtx.webServer.register({
         kind: 'exact',
         path: '/dsh-plus-surface/bridge.json',
         handler: (req, res) => {
@@ -371,7 +378,7 @@ export function apply(ctx) {
       // 壳自动换证：0.1.2+ 无环回豁免，端口映射过来的实例壳拿不到 stdout 里的 token。
       // connection.authenticatedUrl 是公开 API；只对环回吐 token——能在对端本机连上
       // （含 SSH/端口映射在本机落地）≈ 本来就能读 stdout。LAN/WAN 仍走官方 token URL。
-      wsCtx.effect(() => wsCtx.webServer.register({
+      connCtx.effect(() => connCtx.webServer.register({
         kind: 'exact',
         path: '/dsh-plus-surface/launch.json',
         handler: (req, res) => {
@@ -399,6 +406,6 @@ export function apply(ctx) {
         },
       }), 'dsh-plus-surface: launch route')
       connCtx.logger.info('[dsh-plus-surface] HTTP 事实出口就绪 → GET /dsh-plus-surface/bridge.json')
-    })
+    }
   })
 }

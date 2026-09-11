@@ -13,11 +13,13 @@
 //   1. Cordis 事件 agent/created | agent/status | agent/disposed
 //      （@deepseek-ai/dsh-agent runtime-types.ts 的 Events 声明）
 //   2. agent.session.header.origin/parentSession（isTopLevel 判定用；@deepseek-ai/dsh-session）
-//   3. ctx.connection.rpc.handle 自有通道 + ctx.webServer
-//      （@deepseek-ai/dsh-client-connection HostConnectionService；
-//      0.1.5 起 handle 内部经 owner.webServer.register 挂路由，调用当下 webServer
-//      必须已在同一上下文可用——故 connection 与 webServer 必须同一个 inject 等待，
-//      否则 TypeError 连坐拆除整个 inject 纤维，事件监听/路由全灭且无 stdout 报错）
+//   3. client→host 透传走自有 webServer 路由（POST /dsh-plus-surface/sync），
+//      不用 ctx.connection.rpc.handle：0.1.5 起 handle 内部经 owner.webServer.register
+//      挂路由，owner 是绑回 connection 插件纤维的 shadow 上下文，在那里访问
+//      webServer 撞 cordis 隔离边界（"cannot get property without inject"），
+//      同步抛出会连坐拆除整个 inject 纤维且无 stdout 报错——0.1.5 升级时气泡
+//      全灭的真凶。事件监听与 webServer 同挂一个 inject 纤维也有同样意义：
+//      任何一步抛错都不该拖死其余注册。
 //   4. ctx.webServer.register({ kind, path, handler })
 //      （@deepseek-ai/dsh-host-webserver WebServer 服务；远端壳的 HTTP 事实出口用）
 //   5. ctx.connection.authenticatedUrl(baseUrl)
@@ -32,8 +34,8 @@ import { fileURLToPath } from 'node:url'
 export const name = 'dsh-plus-surface'
 export const inject = ['skills']
 
-/** client 半上报通道（自有 prefix，不占共享 /api 的独占 interceptor） */
-const CHANNEL = '/dsh-plus-surface'
+/** client 半上报路径（自有 exact 路由，不占共享 /api 的独占 interceptor） */
+const SYNC_PATH = '/dsh-plus-surface/sync'
 /** idle 会话最多保留条数（running 永远全保留），防桥文件膨胀 */
 const MAX_TRACKED_IDLE = 30
 /** 写盘防抖：一轮对话的事件常成串到达 */
@@ -167,10 +169,8 @@ export function apply(ctx) {
   })
 
   // 有 connection + webServer 服务 = 本进程是 dsh web 的 host；CLI 进程不产事实，
-  // 避免 CLI / web 多进程写同一份桥文件。两者必须同一个 inject 等待：0.1.5 起
-  // rpc.handle 内部立即经 owner.webServer.register 挂通道路由，webServer 后于
-  // connection 就绪时，先触发的一半会在 handle 处抛 TypeError，cordis 连坐拆除
-  // 整个纤维（已注册的事件监听同归于尽），且错误不进 stdout——曾致气泡全灭。
+  // 避免 CLI / web 多进程写同一份桥文件。connection 为 launch.json 的
+  // authenticatedUrl 保留；事实透传不再用 rpc.handle（隔离边界陷阱见文件头 §3）。
   ctx.inject(['connection', 'webServer'], (connCtx) => {
     const dir = join(dshHome(), 'dsh-plus')
     const file = join(dir, 'bridge.json')
@@ -314,15 +314,16 @@ export function apply(ctx) {
       persist()
     })
 
-    // client 半透传会话事实（整体替换 cli 快照；只收标量，字段消失即清）
-    connCtx.connection.rpc.handle(CHANNEL, async (endpoint, payload) => {
-      if (endpoint !== 'sync') {
-        return { ok: false, error: { code: 'bad-request', message: `unknown endpoint ${JSON.stringify(endpoint)}` } }
-      }
+    // client 半透传会话事实（整体替换 cli 快照；只收标量，字段消失即清）。
+    // 数据通道 = 自有 HTTP 路由（下方 POST /dsh-plus-surface/sync）。不要用
+    // connection.rpc.handle：0.1.5 起它内部经 owner.webServer.register 挂路由，
+    // 而 owner 是绑回 connection 插件纤维的 shadow 上下文，在那里访问 webServer
+    // 撞 cordis 隔离边界抛 "cannot get property without inject"——对本组合不可用。
+    function applySync(payload) {
       const id = typeof payload?.sessionId === 'string' ? payload.sessionId : null
       const entry = id ? sessions.get(id) : undefined
       // 只合并「已存在的顶层 entry」：不认识的 id（subagent 等）一律忽略，不写进桥
-      if (!entry) return { ok: true, value: { accepted: false } }
+      if (!entry) return { accepted: false }
       const clientId = typeof payload?.clientId === 'string' && payload.clientId ? payload.clientId : null
       const fields = payload?.fields
       // 选中态上报：completed 的唯一输入。idle 期被任一 client 选中 = 看过（清未看）。
@@ -350,8 +351,8 @@ export function apply(ctx) {
       }
       entry.cli = cli
       persist()
-      return { ok: true, value: { accepted: true } }
-    })
+      return { accepted: true }
+    }
 
     connCtx.logger.info(`[dsh-plus-surface] 事实桥就绪 → ${file}`)
 
@@ -361,6 +362,39 @@ export function apply(ctx) {
     // webServer 服务不存在（非 web host）时此出口静默缺席，壳自动退到 session.list 轮询。
     // webServer 与 connection 同一 inject 等待就位（见上方注释），这里直接用，不再嵌套 inject。
     {
+      // client→host 事实透传通道（POST JSON → applySync）。与只读出口同口径：
+      // 环回绑定、不开新端口；同源页面 fetch 自带 cookie 会话。
+      connCtx.effect(() => connCtx.webServer.register({
+        kind: 'exact',
+        path: SYNC_PATH,
+        handler: (req, res) => {
+          if (req.method !== 'POST') {
+            res.writeHead(405, { allow: 'POST' })
+            res.end()
+            return
+          }
+          const chunks = []
+          let size = 0
+          req.on('data', (chunk) => {
+            chunks.push(chunk)
+            size += chunk.length
+            if (size > 65536) req.destroy() // 标量快照通道，64K 绰绰有余
+          })
+          req.on('end', () => {
+            let payload
+            try {
+              payload = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+            } catch {
+              res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' })
+              res.end('bad json')
+              return
+            }
+            res.writeHead(200, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+            res.end(JSON.stringify(applySync(payload)))
+          })
+          req.on('error', () => { /* 客户端中断：忽略 */ })
+        },
+      }), 'dsh-plus-surface: sync route')
       // effect 绑插件生命周期：HMR/重载时路由随上下文自动摘除，避免重复注册抛错（同 dsh-client-connection 写法）
       connCtx.effect(() => connCtx.webServer.register({
         kind: 'exact',

@@ -10,7 +10,9 @@
 //
 // 私有面脆弱点登记（平台升级先核对这些）：
 //   1. ctx.sessions（ISessions）：list.subscribe/getSnapshot().byId/.current 与 open(id)
-//   2. ctx.connection.rpc.call(channel, endpoint, payload)（client connection 半）
+//   2. 自有 HTTP 通道 fetch('/dsh-plus-surface/sync')（同源 fetch 自带 cookie 会话；
+//      不用 ctx.connection.rpc.call——host 侧 rpc.handle 在 0.1.5 撞 cordis 隔离
+//      边界不可用，详见 index.js 文件头 §3）
 //   3. ctx.uiSession.pendingInteractions（question/approval/plan 的真实来源，list.byId 常缺）
 //   4. window.__dshPlus 全局约定（与壳的 executeJavaScript 配套）
 //   5. byId 行字段：id / displayTitle / pendingInteraction / parentId / title / cwd / …
@@ -23,7 +25,7 @@ window.__ModuleLoader__.load({
     var module = { exports: {} }
     var exports = module.exports
 
-    var CHANNEL = '/dsh-plus-surface'
+    var SYNC_PATH = '/dsh-plus-surface/sync'
     // id/running 是 host 真相；completed 改由 host 依 selected 推导（见文件头）
     var SKIP = { id: true, running: true, completed: true }
 
@@ -73,10 +75,9 @@ window.__ModuleLoader__.load({
         })
       }
 
-      /* inject: ['sessions','connection','uiSession'] 已保证三服务在 apply 前就位，
+      /* inject: ['sessions','uiSession'] 已保证两服务在 apply 前就位，
        * 原先的 ctx.get + null 判空是双轨死代码（评审修复 A4）——直接 ctx.* 取用 */
       var sessions = ctx.sessions
-      var connection = ctx.connection
       var uiSession = ctx.uiSession
 
       ctx.effect(function () {
@@ -88,7 +89,13 @@ window.__ModuleLoader__.load({
           return uiSession.pendingInteractions ? uiSession.pendingInteractions.getSnapshot() : null
         }
         function sync(id, fields) {
-          connection.rpc.call(CHANNEL, 'sync', { sessionId: id, clientId: clientId, fields: fields }).catch(function () {})
+          // 自有 HTTP 通道（host 半 POST /dsh-plus-surface/sync → applySync）；
+          // 同源 fetch 自带 cookie 会话，失败静默（下拍事件自然补）
+          fetch(SYNC_PATH, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ sessionId: id, clientId: clientId, fields: fields }),
+          }).catch(function () {})
         }
         function flush() {
           var snap = sessions.list.getSnapshot()
@@ -164,7 +171,7 @@ window.__ModuleLoader__.load({
 
     module.exports = {
       name: 'dsh-plus-surface-client',
-      inject: ['sessions', 'connection', 'uiSession'],
+      inject: ['sessions', 'uiSession'],
       apply: apply,
     }
     return module.exports

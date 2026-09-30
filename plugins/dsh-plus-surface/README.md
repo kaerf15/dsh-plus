@@ -76,4 +76,4 @@ dsh plugin --profile web add <本目录绝对路径>
 
 ## 兼容基线
 
-`verifiedWith: 0.1.5-rc.1`。私有面脆弱点逐条登记在 `index.js` / `client.js` 文件头注释。
+`verifiedWith: 0.2.0-rc.2`。私有面脆弱点逐条登记在 `index.js` / `client.js` 文件头注释。

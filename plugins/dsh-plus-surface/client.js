@@ -9,11 +9,14 @@
 //   ② 暴露 window.__dshPlus.handle(action) 通用动作入口，供 DSH+ 壳 executeJavaScript 跳转/分发。
 //
 // 私有面脆弱点登记（平台升级先核对这些）：
-//   1. ctx.sessions（ISessions）：list.subscribe/getSnapshot().byId/.current 与 open(id)
+//   1. ctx.sessions.list.subscribe/getSnapshot().byId；当前选中不再是 list.current
+//      （0.2.0 起选中权在视图层）：byId[id].retainedBy.mainView > 0 即主视图会话。
+//      跳转走 ctx.uiWorkspace.openSession(id)，不再有 sessions.open。
 //   2. 自有 HTTP 通道 fetch('/dsh-plus-surface/sync')（同源 fetch 自带 cookie 会话；
 //      不用 ctx.connection.rpc.call——host 侧 rpc.handle 在 0.1.5 撞 cordis 隔离
-//      边界不可用，详见 index.js 文件头 §3）
-//   3. ctx.uiSession.pendingInteractions（question/approval/plan 的真实来源，list.byId 常缺）
+//      边界不可用，详见 index.js 文件头 §3；0.2.0 该实现仍在）
+//   3. ctx.uiSession.sessionStatus（Map<id, {pendingInteraction}>；question/approval/plan
+//      的真实来源，list.byId 常缺。0.1.x 的 pendingInteractions 已移除）
 //   4. window.__dshPlus 全局约定（与壳的 executeJavaScript 配套）
 //   5. byId 行字段：id / displayTitle / pendingInteraction / parentId / title / cwd / …
 //      （selected 是本通道自定义字段、运行时行上没有；若平台未来给行加同名字段会先被
@@ -43,9 +46,11 @@ window.__ModuleLoader__.load({
         var t = typeof v
         if (t === 'string' || t === 'number' || t === 'boolean') fields[k] = v
       }
-      // question/approval/plan 走 uiSession.registerPendingInteraction，不一定出现在 list.byId
+      // question/approval/plan 走 uiSession.registerPendingInteraction，不一定出现在 list.byId。
+      // 0.2.0 快照是 Map<id, SessionStatus>，kind 在 pendingInteraction 上。
       var ui = pendingSnap && pendingSnap.get(row.id)
-      var kind = ui && visiblePendingKind(ui.kind)
+      var pending = ui && ui.pendingInteraction
+      var kind = pending && visiblePendingKind(pending.kind)
       if (kind) fields.pendingInteraction = kind
       else if (typeof row.pendingInteraction === 'string') fields.pendingInteraction = row.pendingInteraction
       return fields
@@ -58,8 +63,11 @@ window.__ModuleLoader__.load({
           if (action.type === 'open-session') {
             var sid = action.target && action.target.sessionId
             if (!sid) return false
-            var sessions = ctx.sessions
-            if (typeof sessions.open === 'function') { sessions.open(sid); return true }
+            var workspace = ctx.uiWorkspace
+            if (workspace && typeof workspace.openSession === 'function') {
+              workspace.openSession(sid)
+              return true
+            }
             return false
           }
           return false
@@ -75,10 +83,21 @@ window.__ModuleLoader__.load({
         })
       }
 
-      /* inject: ['sessions','uiSession'] 已保证两服务在 apply 前就位，
-       * 原先的 ctx.get + null 判空是双轨死代码（评审修复 A4）——直接 ctx.* 取用 */
+      /* inject: ['sessions','uiSession','uiWorkspace'] 已保证三服务在 apply 前就位 */
       var sessions = ctx.sessions
       var uiSession = ctx.uiSession
+
+      /** 0.2.0：主视图选中 = 该行被 mainView 引用留住 */
+      function currentSessionId(snap) {
+        var byId = snap && snap.byId
+        if (!byId) return undefined
+        for (var id in byId) {
+          var row = byId[id]
+          var held = row && row.retainedBy && row.retainedBy.mainView
+          if (held > 0) return id
+        }
+        return undefined
+      }
 
       ctx.effect(function () {
         var seen = {}
@@ -86,7 +105,8 @@ window.__ModuleLoader__.load({
         // 本页面实例的随机 id：host 按 client 维度维护 selectedBy（多客户端选中取并集）
         var clientId = Math.random().toString(36).slice(2) + Date.now().toString(36)
         function pendingSnap() {
-          return uiSession.pendingInteractions ? uiSession.pendingInteractions.getSnapshot() : null
+          var status = uiSession.sessionStatus
+          return status && typeof status.getSnapshot === 'function' ? status.getSnapshot() : null
         }
         function sync(id, fields, key) {
           // 自有 HTTP 通道（host 半 POST /dsh-plus-surface/sync → applySync）；
@@ -103,7 +123,7 @@ window.__ModuleLoader__.load({
         function flush() {
           var snap = sessions.list.getSnapshot()
           var byId = (snap && snap.byId) || {}
-          var current = snap ? snap.current : undefined
+          var current = currentSessionId(snap)
           var pending = pendingSnap()
           for (var id in byId) {
             var row = byId[id]
@@ -130,8 +150,9 @@ window.__ModuleLoader__.load({
           }
         }
         var unsubList = sessions.list.subscribe(flush)
-        var unsubPending = (uiSession && uiSession.pendingInteractions)
-          ? uiSession.pendingInteractions.subscribe(flush)
+        var statusSrc = uiSession.sessionStatus
+        var unsubPending = (statusSrc && typeof statusSrc.subscribe === 'function')
+          ? statusSrc.subscribe(flush)
           : function () {}
         flush()
         // 关页 best-effort 摘选中：不留死标记在 host 的 selectedBy 里
@@ -141,7 +162,7 @@ window.__ModuleLoader__.load({
         function onPageHide() {
           try {
             var snap = sessions.list.getSnapshot()
-            var cur = snap && snap.current
+            var cur = currentSessionId(snap)
             if (!cur) return
             var body = JSON.stringify({ sessionId: cur, clientId: clientId, fields: { selected: false } })
             if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
@@ -159,7 +180,7 @@ window.__ModuleLoader__.load({
         function resyncCurrent() {
           try {
             var snap = sessions.list.getSnapshot()
-            var cur = snap && snap.current
+            var cur = currentSessionId(snap)
             // 删去重键后 flush 必重发当前行（含 selected:true）；从未同步过的行更该补报，不加额外守卫
             if (cur) { delete seen[cur]; flush() }
           } catch (e) { /* 快照暂不可得：下拍事件自然补 */ }
@@ -181,7 +202,7 @@ window.__ModuleLoader__.load({
 
     module.exports = {
       name: 'dsh-plus-surface-client',
-      inject: ['sessions', 'uiSession'],
+      inject: ['sessions', 'uiSession', 'uiWorkspace'],
       apply: apply,
     }
     return module.exports

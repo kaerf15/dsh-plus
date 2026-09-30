@@ -87,7 +87,7 @@ description: >-
 
 形状：`version:1`，`sessions[id] = { status: running|idle, runningSince, finishedAt, cli: { 任意标量字段 } }`。`status/runningSince/finishedAt` 是 host 独写的进程级真相；`cli` 是 client 透传的标量快照（completed / pendingInteraction / title / cwd / updatedAt / …），整体替换、字段消失即清。只记顶层会话（排除 subagent）。无 `connection` 的 CLI 进程不写这份文件。
 
-现成动作两个：`open-session`（`target.sessionId`，client `handle` 调 `sessions.open`）与 `launch-app`（`target.path`，壳 Hub executor 直接 `shell.openPath` 启动本机应用，不经过 client）。壳 Hub 先把应用带到前台再 dispatch。
+现成动作两个：`open-session`（`target.sessionId`，client `handle` 调 `uiWorkspace.openSession`）与 `launch-app`（`target.path`，壳 Hub executor 直接 `shell.openPath` 启动本机应用，不经过 client）。壳 Hub 先把应用带到前台再 dispatch。
 
 ### 3. 壳 `dsh-plus`（画布 + recipe 求值）
 

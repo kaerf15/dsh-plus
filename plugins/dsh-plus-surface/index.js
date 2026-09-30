@@ -301,7 +301,7 @@ export function apply(ctx) {
       if (!entry) return
       selectedBy.delete(id)
       // 销毁后 client 半不会再透传该会话（行已从列表消失）：completed / pendingInteraction
-      // 残留会让壳气泡永远点不掉——点开不了已删会话（sessions.open 抛错），也没人会再上报。
+      // 残留会让壳气泡永远点不掉——点开不了已删会话（uiWorkspace.openSession 对不上），也没人会再上报。
       // title/cwd 保留（正常结束气泡还要展示）；会话若只是「进程重排」稍后会由 client 重传补回。
       entry.completed = false
       delete entry.cli.pendingInteraction
